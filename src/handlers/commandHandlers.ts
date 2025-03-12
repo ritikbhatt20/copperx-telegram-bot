@@ -7,11 +7,13 @@ import {
   getProfile,
   getKycStatus,
   getBalances,
+  getWallets,
   sendUsdc,
   withdrawUsdc,
   getTransactionHistory,
 } from "../services/apiClient";
-import { CONFIG } from "../config";
+import { BalanceResponse } from "../config";
+import { CONFIG, NETWORK_NAMES } from "../config";
 
 // Helper function to check login and handle unauthorized users
 function requireAuth(ctx: Context, next: () => Promise<void>): Promise<void> {
@@ -422,74 +424,90 @@ export async function handleKycStatus(ctx: Context): Promise<void> {
   }
 }
 
-// Balance command
 export async function handleBalance(ctx: Context): Promise<void> {
-  const chatId = ctx.chat?.id.toString();
-  if (!chatId) return;
+  await requireAuth(ctx, async () => {
+    const chatId = ctx.chat!.id.toString();
+    const session = sessionManager.getSession(chatId)!;
 
-  const session = sessionManager.getSession(chatId);
+    try {
+      await ctx.reply("🔄 Fetching your wallet balances...");
 
-  if (!session || !sessionManager.isLoggedIn(chatId)) {
-    await ctx.reply(
-      "⚠️ You need to be logged in to check your balance.",
-      Markup.inlineKeyboard([
-        Markup.button.callback("🔑 Log In", "start_login"),
-      ])
-    );
-    return;
-  }
+      // Fetch wallets and balances
+      const wallets = await getWallets(session.accessToken!);
+      const balances: BalanceResponse = await getBalances(session.accessToken!); // Explicitly typed as array
 
-  try {
-    await ctx.reply("🔄 Fetching your balances...");
+      if (!balances || balances.length === 0) {
+        await ctx.reply(
+          "No wallets found. Contact support to set up your account."
+        );
+        return;
+      }
 
-    // Placeholder implementation - replace with actual API call when available
-    // const balances = await getBalances(session.accessToken!);
+      // Map wallets to their balances
+      const walletMap = new Map(wallets.map((w) => [w.id, w]));
+      const balanceMessage = balances
+        .map(
+          (wallet: {
+            walletId: string;
+            isDefault: boolean | null;
+            network: string;
+            balances: Array<{
+              symbol: string;
+              balance: string;
+              decimals: number;
+              address: string;
+            }>;
+          }) => {
+            const walletInfo = walletMap.get(wallet.walletId);
+            const networkName =
+              NETWORK_NAMES[wallet.network] || `Unknown (${wallet.network})`;
+            const isDefault = wallet.isDefault ? " (Default)" : "";
+            const balanceDetails =
+              wallet.balances.length > 0
+                ? wallet.balances
+                    .map(
+                      (b: {
+                        symbol: string;
+                        balance: string;
+                        decimals: number;
+                        address: string;
+                      }) =>
+                        `${b.symbol}: ${(
+                          parseFloat(b.balance) / Math.pow(10, b.decimals)
+                        ).toFixed(2)}`
+                    )
+                    .join("\n")
+                : "No balances";
+            return `*${networkName}${isDefault}*\n${balanceDetails}`;
+          }
+        )
+        .join("\n\n");
 
-    // Temporary mock data for demonstration
-    const balances = {
-      balances: [
-        { currency: "USDC", network: "solana", amount: "1000.50" },
-        { currency: "USDC", network: "ethereum", amount: "500.25" },
-      ],
-    };
-
-    if (!balances.balances || balances.balances.length === 0) {
-      await ctx.reply(
-        "You don't have any balances yet. Deposit funds to get started."
-      );
-      return;
-    }
-
-    const balanceMessage = balances.balances
-      .map((b) => `${b.currency} (${b.network}): ${b.amount}`)
-      .join("\n");
-
-    await ctx.replyWithMarkdown(
-      `*💵 Your Balances*\n\n${balanceMessage}`,
-      Markup.inlineKeyboard([
-        [
-          Markup.button.callback("📤 Send USDC", "start_send"),
-          Markup.button.callback("🏦 Withdraw", "start_withdraw"),
-        ],
-        [Markup.button.callback("📜 Transaction History", "view_history")],
-      ])
-    );
-  } catch (error) {
-    const err = error as Error;
-
-    if (err.message.includes("401") || err.message.includes("unauthorized")) {
-      sessionManager.deleteSession(chatId);
-      await ctx.reply(
-        "⚠️ Your session has expired. Please log in again.",
+      await ctx.replyWithMarkdown(
+        `*💵 Your Wallet Balances*\n\n${balanceMessage}\n\nTo add funds, deposit USDC to your wallet addresses via /profile.`,
         Markup.inlineKeyboard([
-          Markup.button.callback("🔑 Log In", "start_login"),
+          [
+            Markup.button.callback("📤 Send USDC", "start_send"),
+            Markup.button.callback("🏦 Withdraw", "start_withdraw"),
+          ],
+          [Markup.button.callback("📜 History", "view_history")],
         ])
       );
-      return;
+    } catch (error) {
+      const err = error as Error;
+      if (err.message.includes("401")) {
+        sessionManager.deleteSession(chatId);
+        await ctx.reply(
+          "⚠️ Session expired. Please log in again.",
+          Markup.inlineKeyboard([
+            Markup.button.callback("🔑 Log In", "start_login"),
+          ])
+        );
+        return;
+      }
+      await ctx.reply(`❌ Error: ${err.message}`);
     }
-
-    await ctx.reply(`❌ Error: ${err.message}`);
-  }
+  });
 }
 
 // Send USDC command

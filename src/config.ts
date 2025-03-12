@@ -3,6 +3,12 @@ export const CONFIG = {
   SUPPORT_LINK: "https://t.me/copperxcommunity/2183",
 };
 
+export const NETWORK_NAMES: { [key: string]: string } = {
+  "137": "Polygon",
+  "42161": "Arbitrum",
+  "8453": "Base",
+};
+
 export interface UserSession {
   chatId: string;
   email?: string;
@@ -53,12 +59,27 @@ export interface KycResponse {
   }>;
 }
 
-export interface BalanceResponse {
+export type BalanceResponse = Array<{
+  walletId: string;
+  isDefault: boolean | null;
+  network: string; // e.g., "137", "42161", "8453"
   balances: Array<{
-    currency: string;
-    network: string;
-    amount: string;
+    symbol: string;
+    balance: string;
+    decimals: number;
+    address: string;
   }>;
+}>;
+
+export interface WalletResponse {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  organizationId: string;
+  walletType: string;
+  isDefault: boolean | null;
+  network: string; // e.g., "137", "42161", "8453"
+  walletAddress: string;
 }
 
 export interface ErrorResponse {

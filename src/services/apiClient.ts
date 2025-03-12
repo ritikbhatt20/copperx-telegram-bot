@@ -6,6 +6,7 @@ import {
   ProfileResponse,
   KycResponse,
   BalanceResponse,
+  WalletResponse,
   ErrorResponse,
   AxiosError,
 } from "../config";
@@ -95,7 +96,7 @@ export async function getKycStatus(accessToken: string): Promise<KycResponse> {
   }
 }
 
-// Get wallet balances
+// getBalances
 export async function getBalances(
   accessToken: string
 ): Promise<BalanceResponse> {
@@ -111,6 +112,25 @@ export async function getBalances(
     const axiosError = error as AxiosError<ErrorResponse>;
     throw new Error(
       `Failed to get balances: ${
+        axiosError.response?.data?.message || axiosError.message
+      }`
+    );
+  }
+}
+
+// getWallets
+export async function getWallets(
+  accessToken: string
+): Promise<WalletResponse[]> {
+  try {
+    const response = await apiClient.get<WalletResponse[]>("/api/wallets", {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    return response.data;
+  } catch (error) {
+    const axiosError = error as AxiosError<ErrorResponse>;
+    throw new Error(
+      `Failed to get wallets: ${
         axiosError.response?.data?.message || axiosError.message
       }`
     );
