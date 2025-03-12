@@ -14,21 +14,22 @@ import {
 import { CONFIG } from "../config";
 
 // Helper function to check login and handle unauthorized users
-function requireAuth(
-  ctx: Context,
-  next: () => Promise<void>
-): Promise<void> | void {
+function requireAuth(ctx: Context, next: () => Promise<void>): Promise<void> {
   const chatId = ctx.chat?.id.toString();
-  if (!chatId) return ctx.reply("Error: Could not identify your chat session.");
+  if (!chatId) {
+    ctx.reply("Error: Could not identify your chat session.");
+    return Promise.resolve();
+  }
 
   if (!sessionManager.isLoggedIn(chatId)) {
-    return ctx.reply(
+    ctx.reply(
       "⚠️ You need to be logged in to use this command.\n\n" +
         "Press the button below to log in:",
       Markup.inlineKeyboard([
         Markup.button.callback("🔑 Log In", "start_login"),
       ])
     );
+    return Promise.resolve();
   }
 
   return next();
@@ -109,12 +110,16 @@ export async function handleHelp(ctx: Context): Promise<void> {
 // Login flow
 export async function handleStartLogin(ctx: Context): Promise<void> {
   const chatId = ctx.chat?.id.toString();
-  if (!chatId) return;
+  if (!chatId) {
+    await ctx.reply("Error: Could not identify your chat session.");
+    return;
+  }
 
   if (sessionManager.isLoggedIn(chatId)) {
-    return ctx.reply(
+    await ctx.reply(
       "You're already logged in! Use /profile to view your account or /logout to sign out."
     );
+    return;
   }
 
   sessionManager.setSession(chatId, { loginState: "waiting_for_email" });
@@ -131,7 +136,10 @@ export async function handleEmailInput(
   email: string
 ): Promise<void> {
   const chatId = ctx.chat?.id.toString();
-  if (!chatId) return;
+  if (!chatId) {
+    await ctx.reply("Error: Could not identify your chat session.");
+    return;
+  }
 
   const session = sessionManager.getSession(chatId);
 
@@ -140,9 +148,10 @@ export async function handleEmailInput(
   }
 
   if (!email.includes("@") || !email.includes(".")) {
-    return ctx.reply(
+    await ctx.reply(
       "⚠️ That doesn't look like a valid email address. Please try again:"
     );
+    return;
   }
 
   try {
@@ -196,7 +205,8 @@ export async function handleOtpInput(ctx: Context, otp: string): Promise<void> {
   }
 
   if (!otp || otp.length !== 6 || !/^\d+$/.test(otp)) {
-    return ctx.reply("⚠️ Please enter a valid 6-digit OTP code:");
+    await ctx.reply("⚠️ Please enter a valid 6-digit OTP code:");
+    return;
   }
 
   try {
@@ -251,9 +261,10 @@ export async function handleLogout(ctx: Context): Promise<void> {
   if (!chatId) return;
 
   if (!sessionManager.isLoggedIn(chatId)) {
-    return ctx.reply(
+    await ctx.reply(
       "You're not currently logged in. Use /login to sign in to your account."
     );
+    return;
   }
 
   sessionManager.deleteSession(chatId);
@@ -274,12 +285,13 @@ export async function handleProfile(ctx: Context): Promise<void> {
   const session = sessionManager.getSession(chatId);
 
   if (!session || !sessionManager.isLoggedIn(chatId)) {
-    return ctx.reply(
+    await ctx.reply(
       "⚠️ You need to be logged in to view your profile.",
       Markup.inlineKeyboard([
         Markup.button.callback("🔑 Log In", "start_login"),
       ])
     );
+    return;
   }
 
   try {
@@ -312,12 +324,13 @@ export async function handleProfile(ctx: Context): Promise<void> {
 
     if (err.message.includes("401") || err.message.includes("unauthorized")) {
       sessionManager.deleteSession(chatId);
-      return ctx.reply(
+      await ctx.reply(
         "⚠️ Your session has expired. Please log in again.",
         Markup.inlineKeyboard([
           Markup.button.callback("🔑 Log In", "start_login"),
         ])
       );
+      return;
     }
 
     await ctx.reply(`❌ Error: ${err.message}`);
@@ -332,12 +345,13 @@ export async function handleKycStatus(ctx: Context): Promise<void> {
   const session = sessionManager.getSession(chatId);
 
   if (!session || !sessionManager.isLoggedIn(chatId)) {
-    return ctx.reply(
+    await ctx.reply(
       "⚠️ You need to be logged in to check your KYC status.",
       Markup.inlineKeyboard([
         Markup.button.callback("🔑 Log In", "start_login"),
       ])
     );
+    return;
   }
 
   try {
@@ -346,7 +360,7 @@ export async function handleKycStatus(ctx: Context): Promise<void> {
     const kycData = await getKycStatus(session.accessToken!);
 
     if (kycData.count === 0) {
-      return ctx.replyWithMarkdown(
+      await ctx.replyWithMarkdown(
         "⚠️ *No KYC Records Found*\n\n" +
           "You need to complete your KYC verification on the Copperx platform to " +
           "unlock all features of your account.",
@@ -354,6 +368,7 @@ export async function handleKycStatus(ctx: Context): Promise<void> {
           Markup.button.url("🔒 Complete KYC", "https://copperx.io"),
         ])
       );
+      return;
     }
 
     const kyc = kycData.data[0]; // Get the latest KYC record
@@ -394,12 +409,13 @@ export async function handleKycStatus(ctx: Context): Promise<void> {
 
     if (err.message.includes("401") || err.message.includes("unauthorized")) {
       sessionManager.deleteSession(chatId);
-      return ctx.reply(
+      await ctx.reply(
         "⚠️ Your session has expired. Please log in again.",
         Markup.inlineKeyboard([
           Markup.button.callback("🔑 Log In", "start_login"),
         ])
       );
+      return;
     }
 
     await ctx.reply(`❌ Error: ${err.message}`);
@@ -414,12 +430,13 @@ export async function handleBalance(ctx: Context): Promise<void> {
   const session = sessionManager.getSession(chatId);
 
   if (!session || !sessionManager.isLoggedIn(chatId)) {
-    return ctx.reply(
+    await ctx.reply(
       "⚠️ You need to be logged in to check your balance.",
       Markup.inlineKeyboard([
         Markup.button.callback("🔑 Log In", "start_login"),
       ])
     );
+    return;
   }
 
   try {
@@ -437,9 +454,10 @@ export async function handleBalance(ctx: Context): Promise<void> {
     };
 
     if (!balances.balances || balances.balances.length === 0) {
-      return ctx.reply(
+      await ctx.reply(
         "You don't have any balances yet. Deposit funds to get started."
       );
+      return;
     }
 
     const balanceMessage = balances.balances
@@ -461,12 +479,13 @@ export async function handleBalance(ctx: Context): Promise<void> {
 
     if (err.message.includes("401") || err.message.includes("unauthorized")) {
       sessionManager.deleteSession(chatId);
-      return ctx.reply(
+      await ctx.reply(
         "⚠️ Your session has expired. Please log in again.",
         Markup.inlineKeyboard([
           Markup.button.callback("🔑 Log In", "start_login"),
         ])
       );
+      return;
     }
 
     await ctx.reply(`❌ Error: ${err.message}`);
@@ -479,12 +498,13 @@ export async function handleStartSend(ctx: Context): Promise<void> {
   if (!chatId) return;
 
   if (!sessionManager.isLoggedIn(chatId)) {
-    return ctx.reply(
+    await ctx.reply(
       "⚠️ You need to be logged in to send USDC.",
       Markup.inlineKeyboard([
         Markup.button.callback("🔑 Log In", "start_login"),
       ])
     );
+    return;
   }
 
   await ctx.replyWithMarkdown(
@@ -505,12 +525,13 @@ export async function handleStartWithdraw(ctx: Context): Promise<void> {
   if (!chatId) return;
 
   if (!sessionManager.isLoggedIn(chatId)) {
-    return ctx.reply(
+    await ctx.reply(
       "⚠️ You need to be logged in to withdraw USDC.",
       Markup.inlineKeyboard([
         Markup.button.callback("🔑 Log In", "start_login"),
       ])
     );
+    return;
   }
 
   await ctx.replyWithMarkdown(
@@ -532,12 +553,13 @@ export async function handleTransactionHistory(ctx: Context): Promise<void> {
   const session = sessionManager.getSession(chatId);
 
   if (!session || !sessionManager.isLoggedIn(chatId)) {
-    return ctx.reply(
+    await ctx.reply(
       "⚠️ You need to be logged in to view your transaction history.",
       Markup.inlineKeyboard([
         Markup.button.callback("🔑 Log In", "start_login"),
       ])
     );
+    return;
   }
 
   try {
@@ -586,9 +608,10 @@ export async function handleTransactionHistory(ctx: Context): Promise<void> {
     };
 
     if (!history.transactions || history.transactions.length === 0) {
-      return ctx.reply(
+      await ctx.reply(
         "You don't have any transactions yet. Start by sending or receiving USDC."
       );
+      return;
     }
 
     // Format the transactions
@@ -629,12 +652,13 @@ export async function handleTransactionHistory(ctx: Context): Promise<void> {
 
     if (err.message.includes("401") || err.message.includes("unauthorized")) {
       sessionManager.deleteSession(chatId);
-      return ctx.reply(
+      await ctx.reply(
         "⚠️ Your session has expired. Please log in again.",
         Markup.inlineKeyboard([
           Markup.button.callback("🔑 Log In", "start_login"),
         ])
       );
+      return;
     }
 
     await ctx.reply(`❌ Error: ${err.message}`);
@@ -755,9 +779,10 @@ export async function handleRecipientInput(
 
   // Basic validation
   if (!recipient || recipient.trim().length < 5) {
-    return ctx.reply(
+    await ctx.reply(
       "⚠️ Please enter a valid recipient email or wallet address:"
     );
+    return;
   }
 
   sessionManager.setSession(chatId, {
@@ -788,7 +813,8 @@ export async function handleDestinationInput(
 
   // Basic validation
   if (!destination || destination.trim().length < 5) {
-    return ctx.reply("⚠️ Please enter a valid destination wallet address:");
+    await ctx.reply("⚠️ Please enter a valid destination wallet address:");
+    return;
   }
 
   sessionManager.setSession(chatId, {
@@ -830,7 +856,8 @@ export async function handleSendAmountInput(
   // Validate amount
   const amount = parseFloat(amountStr);
   if (isNaN(amount) || amount <= 0) {
-    return ctx.reply("⚠️ Please enter a valid amount greater than 0:");
+    await ctx.reply("⚠️ Please enter a valid amount greater than 0:");
+    return;
   }
 
   // Confirm transaction
@@ -878,7 +905,8 @@ export async function handleWithdrawAmountInput(
   // Validate amount
   const amount = parseFloat(amountStr);
   if (isNaN(amount) || amount <= 0) {
-    return ctx.reply("⚠️ Please enter a valid amount greater than 0:");
+    await ctx.reply("⚠️ Please enter a valid amount greater than 0:");
+    return;
   }
 
   // Confirm transaction
@@ -939,12 +967,13 @@ export async function handleSendConfirmation(
 
     if (err.message.includes("401") || err.message.includes("unauthorized")) {
       sessionManager.deleteSession(chatId);
-      return ctx.reply(
+      await ctx.reply(
         "⚠️ Your session has expired. Please log in again.",
         Markup.inlineKeyboard([
           Markup.button.callback("🔑 Log In", "start_login"),
         ])
       );
+      return;
     }
 
     await ctx.reply(
@@ -997,12 +1026,13 @@ export async function handleWithdrawConfirmation(
 
     if (err.message.includes("401") || err.message.includes("unauthorized")) {
       sessionManager.deleteSession(chatId);
-      return ctx.reply(
+      await ctx.reply(
         "⚠️ Your session has expired. Please log in again.",
         Markup.inlineKeyboard([
           Markup.button.callback("🔑 Log In", "start_login"),
         ])
       );
+      return;
     }
 
     await ctx.reply(
