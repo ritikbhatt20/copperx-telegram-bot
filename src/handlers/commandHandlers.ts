@@ -8,6 +8,7 @@ import {
   getKycStatus,
   getBalances,
   getWallets,
+  setDefaultWallet,
   sendUsdc,
   withdrawUsdc,
   getTransactionHistory,
@@ -74,34 +75,29 @@ export async function handleHelp(ctx: Context): Promise<void> {
     "• /start - Start or restart the bot\n" +
     "• /help - Show this help message\n\n" +
     "*Account:*\n" +
-    `• ${
-      isLoggedIn
-        ? "📤 /logout - Log out of your account"
-        : "🔑 Press 'Log In' button to authenticate"
-    }\n` +
-    "• 👤 /profile - View your account profile\n" +
-    "• 🔒 /kyc - Check your KYC verification status\n\n" +
+    `• ${isLoggedIn ? "📤 /logout - Log out" : "🔑 Log in below"}\n` +
+    "• 👤 /profile - View your profile\n" +
+    "• 🔒 /kyc - Check KYC status\n" +
+    "• 🏦 /setdefault - Set your default wallet\n\n" +
     "*Transactions:*\n" +
-    "• 💵 /balance - Check your wallet balances\n" +
-    "• 📤 /send - Send USDC to an email or wallet\n" +
-    "• 🏦 /withdraw - Withdraw USDC to a wallet or bank\n" +
-    "• 📜 /history - View your recent transactions\n\n" +
-    `*Need help?* Contact support: ${CONFIG.SUPPORT_LINK}`;
+    "• 💵 /balance - Check wallet balances\n" +
+    "• 📤 /send - Send USDC\n" +
+    "• 🏦 /withdraw - Withdraw USDC\n" +
+    "• 📜 /history - View recent transactions\n\n" +
+    `*Support:* ${CONFIG.SUPPORT_LINK}`;
 
-  const keyboardButtons = [];
-
-  if (isLoggedIn) {
-    keyboardButtons.push([
-      Markup.button.callback("👤 Profile", "view_profile"),
-      Markup.button.callback("💵 Balance", "view_balance"),
-    ]);
-    keyboardButtons.push([
-      Markup.button.callback("📤 Send USDC", "start_send"),
-      Markup.button.callback("🏦 Withdraw", "start_withdraw"),
-    ]);
-  } else {
-    keyboardButtons.push([Markup.button.callback("🔑 Log In", "start_login")]);
-  }
+  const keyboardButtons = isLoggedIn
+    ? [
+        [
+          Markup.button.callback("👤 Profile", "view_profile"),
+          Markup.button.callback("💵 Balance", "view_balance"),
+        ],
+        [
+          Markup.button.callback("📤 Send USDC", "start_send"),
+          Markup.button.callback("🏦 Withdraw", "start_withdraw"),
+        ],
+      ]
+    : [[Markup.button.callback("🔑 Log In", "start_login")]];
 
   await ctx.replyWithMarkdown(
     helpMessage,
@@ -508,6 +504,106 @@ export async function handleBalance(ctx: Context): Promise<void> {
       await ctx.reply(`❌ Error: ${err.message}`);
     }
   });
+}
+
+export async function handleSetDefaultWallet(ctx: Context): Promise<void> {
+  await requireAuth(ctx, async () => {
+    const chatId = ctx.chat!.id.toString();
+    const session = sessionManager.getSession(chatId)!;
+
+    try {
+      await ctx.reply("🔄 Fetching your wallets...");
+
+      // Fetch wallets
+      const wallets = await getWallets(session.accessToken!);
+
+      if (!wallets || wallets.length === 0) {
+        await ctx.reply(
+          "No wallets found. Contact support to set up your account."
+        );
+        return;
+      }
+
+      // Create inline keyboard with wallet options
+      const walletButtons = wallets.map((wallet) => [
+        Markup.button.callback(
+          `${NETWORK_NAMES[wallet.network] || wallet.network} ${
+            wallet.isDefault ? "(Default)" : ""
+          }`,
+          `set_default_wallet_${wallet.id}`
+        ),
+      ]);
+
+      await ctx.replyWithMarkdown(
+        `*🏦 Set Default Wallet*\n\nChoose a wallet to set as default:`,
+        Markup.inlineKeyboard([
+          ...walletButtons,
+          [Markup.button.callback("❌ Cancel", "cancel_action")],
+        ])
+      );
+    } catch (error) {
+      const err = error as Error;
+      if (err.message.includes("401")) {
+        sessionManager.deleteSession(chatId);
+        await ctx.reply(
+          "⚠️ Session expired. Please log in again.",
+          Markup.inlineKeyboard([
+            Markup.button.callback("🔑 Log In", "start_login"),
+          ])
+        );
+        return;
+      }
+      await ctx.reply(`❌ Error: ${err.message}`);
+    }
+  });
+}
+
+export async function handleSetDefaultWalletSelection(
+  ctx: Context,
+  walletId: string
+): Promise<void> {
+  const chatId = ctx.chat?.id.toString();
+  if (!chatId) return;
+
+  const session = sessionManager.getSession(chatId);
+  if (!session || !session.accessToken) return;
+
+  try {
+    await ctx.reply("🔄 Setting default wallet...");
+
+    // Set the default wallet
+    const updatedWallet = await setDefaultWallet(session.accessToken, walletId);
+
+    const networkName =
+      NETWORK_NAMES[updatedWallet.network] || updatedWallet.network;
+    await ctx.replyWithMarkdown(
+      `✅ *Default Wallet Updated!*\n\n` +
+        `New default wallet: *${networkName}*\n` +
+        `Address: \`${updatedWallet.walletAddress}\``,
+      Markup.inlineKeyboard([
+        [Markup.button.callback("💵 Check Balances", "view_balance")],
+        [
+          Markup.button.callback(
+            "🏦 Set Another Default",
+            "set_default_wallet"
+          ),
+        ],
+      ])
+    );
+  } catch (error) {
+    const err = error as Error;
+    if (err.message.includes("401")) {
+      sessionManager.deleteSession(chatId);
+      await ctx.reply(
+        "⚠️ Session expired. Please log in again.",
+        Markup.inlineKeyboard([
+          Markup.button.callback("🔑 Log In", "start_login"),
+        ])
+      );
+      return;
+    }
+    await ctx.reply(`❌ Error: ${err.message}`);
+  }
 }
 
 // Send USDC command

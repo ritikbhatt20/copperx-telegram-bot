@@ -137,6 +137,26 @@ export async function getWallets(
   }
 }
 
+// set default wallet
+export async function setDefaultWallet(
+    accessToken: string,
+    walletId: string
+  ): Promise<WalletResponse> {
+    try {
+      const response = await apiClient.post<WalletResponse>(
+        "/api/wallets/default",
+        { walletId },
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      return response.data;
+    } catch (error) {
+      const axiosError = error as AxiosError<ErrorResponse>;
+      throw new Error(
+        `Failed to set default wallet: ${axiosError.response?.data?.message || axiosError.message}`
+      );
+    }
+  }
+
 // Send USDC to email or wallet
 export async function sendUsdc(
   accessToken: string,

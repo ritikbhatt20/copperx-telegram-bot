@@ -1,7 +1,6 @@
 import { Context } from "telegraf";
 import { sessionManager } from "../services/sessionManager";
 
-// Handle callback queries
 export async function handleCallbackQuery(ctx: Context): Promise<void> {
   if (!ctx.callbackQuery || !("data" in ctx.callbackQuery)) return;
 
@@ -9,10 +8,8 @@ export async function handleCallbackQuery(ctx: Context): Promise<void> {
   const chatId = ctx.chat?.id.toString();
   if (!chatId) return;
 
-  // Answer the callback query to remove loading state
   await ctx.answerCbQuery();
 
-  // Import handlers dynamically to avoid circular dependencies
   const {
     handleStartLogin,
     handleLogout,
@@ -29,6 +26,8 @@ export async function handleCallbackQuery(ctx: Context): Promise<void> {
     handleSendConfirmation,
     handleWithdrawConfirmation,
     handleHelp,
+    handleSetDefaultWallet, // Added
+    handleSetDefaultWalletSelection, // Added
   } = await import("./commandHandlers");
 
   // Basic commands
@@ -74,6 +73,16 @@ export async function handleCallbackQuery(ctx: Context): Promise<void> {
 
   if (data === "request_new_otp") {
     return handleRequestNewOtp(ctx);
+  }
+
+  // Set default wallet
+  if (data === "set_default_wallet") {
+    return handleSetDefaultWallet(ctx);
+  }
+
+  if (data.startsWith("set_default_wallet_")) {
+    const walletId = data.replace("set_default_wallet_", "");
+    return handleSetDefaultWalletSelection(ctx, walletId);
   }
 
   // Network selection for send

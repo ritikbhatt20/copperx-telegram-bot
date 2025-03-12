@@ -12,6 +12,7 @@ import {
   handleStartSend,
   handleStartWithdraw,
   handleTransactionHistory,
+  handleSetDefaultWallet,
 } from "./handlers/commandHandlers";
 
 // Initialize bot
@@ -27,6 +28,7 @@ bot.command("logout", handleLogout);
 bot.command("profile", handleProfile);
 bot.command("kyc", handleKycStatus);
 bot.command("balance", handleBalance);
+bot.command("setdefault", handleSetDefaultWallet);
 bot.command("send", handleStartSend);
 bot.command("withdraw", handleStartWithdraw);
 bot.command("history", handleTransactionHistory);
