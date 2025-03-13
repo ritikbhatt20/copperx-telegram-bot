@@ -608,7 +608,10 @@ export async function handleSetDefaultWalletSelection(
 export async function handleStartSend(ctx: Context): Promise<void> {
   await requireAuth(ctx, async () => {
     const chatId = ctx.chat!.id.toString();
-    sendStates.set(chatId, { step: "address" });
+    const session = sessionManager.getSession(chatId)!;
+
+    session.lastAction = "send"; // Start send flow
+    sessionManager.setSession(chatId, session);
 
     await ctx.replyWithMarkdown(
       "📤 *Send USDC*\n\nPlease enter the wallet address to send funds to:",
@@ -619,15 +622,13 @@ export async function handleStartSend(ctx: Context): Promise<void> {
   });
 }
 
-export async function handleSendAddress(ctx: Context): Promise<void> {
+export async function handleSendAddress(
+  ctx: Context,
+  walletAddress: string
+): Promise<void> {
   const chatId = ctx.chat!.id.toString();
-  const state = sendStates.get(chatId);
-  const message = ctx.message;
+  const session = sessionManager.getSession(chatId)!;
 
-  if (!state || state.step !== "address" || !message || !("text" in message))
-    return;
-
-  const walletAddress = message.text.trim();
   if (!walletAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
     await ctx.reply(
       "❌ Invalid wallet address. Please enter a valid Ethereum address (e.g., 0x...)."
@@ -635,7 +636,9 @@ export async function handleSendAddress(ctx: Context): Promise<void> {
     return;
   }
 
-  sendStates.set(chatId, { step: "amount", walletAddress });
+  session.lastAction = `send_to_${walletAddress}`;
+  sessionManager.setSession(chatId, session);
+
   await ctx.replyWithMarkdown(
     `📤 *Send USDC*\n\nWallet address: \`${walletAddress}\`\n\nPlease enter the amount in USDC:`,
     Markup.inlineKeyboard([
@@ -644,15 +647,14 @@ export async function handleSendAddress(ctx: Context): Promise<void> {
   );
 }
 
-export async function handleSendAmount(ctx: Context): Promise<void> {
+export async function handleSendAmount(
+  ctx: Context,
+  amountStr: string
+): Promise<void> {
   const chatId = ctx.chat!.id.toString();
-  const state = sendStates.get(chatId);
-  const message = ctx.message;
+  const session = sessionManager.getSession(chatId)!;
 
-  if (!state || state.step !== "amount" || !message || !("text" in message))
-    return;
-
-  const amount = parseFloat(message.text.trim());
+  const amount = parseFloat(amountStr.trim());
   if (isNaN(amount) || amount <= 0) {
     await ctx.reply(
       "❌ Invalid amount. Please enter a positive number (e.g., 5)."
@@ -660,21 +662,20 @@ export async function handleSendAmount(ctx: Context): Promise<void> {
     return;
   }
 
-  sendStates.set(chatId, {
-    step: "confirm",
-    walletAddress: state.walletAddress,
-    amount,
-  });
+  const walletAddress = session.lastAction!.split("_to_")[1];
+  session.lastAction = `send_to_${walletAddress}_amount_${amount}`;
+  sessionManager.setSession(chatId, session);
+
   await ctx.replyWithMarkdown(
     `📤 *Confirm Send*\n\n` +
-      `To: \`${state.walletAddress}\`\n` +
+      `To: \`${walletAddress}\`\n` +
       `Amount: *${amount.toFixed(2)} USDC*\n\n` +
       `Press "Confirm" to send the funds.`,
     Markup.inlineKeyboard([
       [
         Markup.button.callback(
           "✅ Confirm",
-          `confirm_send_${state.walletAddress}_${amount}`
+          `confirm_send_${walletAddress}_${amount}`
         ),
       ],
       [Markup.button.callback("❌ Cancel", "cancel_action")],
@@ -697,14 +698,15 @@ export async function handleSendConfirmation(
 
     const withdrawData = {
       walletAddress,
-      amount: (amount * 1e8).toString(), // Convert to 10^8 scale (e.g., 5 USDC = 500000000)
+      amount: (amount * 1e8).toString(), // 10^8 scale: 5 USDC = 500000000
       purposeCode: "self",
       currency: "USDC",
     };
 
     const result = await withdrawToWallet(session.accessToken, withdrawData);
 
-    sendStates.delete(chatId); // Clear state on success
+    session.lastAction = undefined; // Clear state
+    sessionManager.setSession(chatId, session);
 
     await ctx.replyWithMarkdown(
       `✅ *Funds Sent!*\n\n` +
@@ -719,6 +721,9 @@ export async function handleSendConfirmation(
     );
   } catch (error) {
     const err = error as Error;
+    session.lastAction = undefined; // Clear state on error
+    sessionManager.setSession(chatId, session);
+
     if (err.message.includes("401")) {
       sessionManager.deleteSession(chatId);
       await ctx.reply(
@@ -730,15 +735,17 @@ export async function handleSendConfirmation(
       return;
     }
     await ctx.reply(`❌ Error: ${err.message}`);
-  } finally {
-    sendStates.delete(chatId); // Clear state on error too
   }
 }
 
 // Update handleCancelAction to clear send state
 export async function handleCancelAction(ctx: Context): Promise<void> {
   const chatId = ctx.chat!.id.toString();
-  sendStates.delete(chatId);
+  const session = sessionManager.getSession(chatId);
+  if (session) {
+    session.lastAction = undefined;
+    sessionManager.setSession(chatId, session);
+  }
   await ctx.reply("Action cancelled.", Markup.removeKeyboard());
 }
 
