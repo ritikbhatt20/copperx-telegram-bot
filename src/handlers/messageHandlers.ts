@@ -36,6 +36,17 @@ export async function handleTextMessage(ctx: Context): Promise<void> {
     return handleSendAmount(ctx, text);
   }
 
+  // Handle addpayee flow
+  if (session.lastAction === "addpayee") {
+    const { handlePayeeEmail } = await import("./commandHandlers");
+    return handlePayeeEmail(ctx, text);
+  }
+
+  if (session.lastAction?.startsWith("addpayee_email_")) {
+    const { handlePayeeNickname } = await import("./commandHandlers");
+    return handlePayeeNickname(ctx, text);
+  }
+
   // Handle existing transaction flows
   if (
     session.lastAction?.startsWith("send_") &&

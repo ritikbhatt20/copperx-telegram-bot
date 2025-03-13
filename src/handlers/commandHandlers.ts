@@ -9,6 +9,7 @@ import {
   getBalances,
   getWallets,
   setDefaultWallet,
+  createPayee,
   sendUsdc,
   withdrawUsdc,
   getTransactionHistory,
@@ -92,7 +93,8 @@ export async function handleHelp(ctx: Context): Promise<void> {
     "• 💵 /balance - Check wallet balances\n" +
     "• 📤 /send - Send USDC\n" +
     "• 🏦 /withdraw - Withdraw USDC\n" +
-    "• 📜 /history - View recent transactions\n\n" +
+    "• 📜 /history - View recent transactions\n" +
+    "• ➕ /addpayee - Add a new payee\n\n" + // Added /addpayee here
     `*Support:* ${CONFIG.SUPPORT_LINK}`;
 
   const keyboardButtons = isLoggedIn
@@ -105,6 +107,7 @@ export async function handleHelp(ctx: Context): Promise<void> {
           Markup.button.callback("📤 Send USDC", "start_send"),
           Markup.button.callback("🏦 Withdraw", "start_withdraw"),
         ],
+        [Markup.button.callback("➕ Add Payee", "start_addpayee")], // Added inline button
       ]
     : [[Markup.button.callback("🔑 Log In", "start_login")]];
 
@@ -747,6 +750,99 @@ export async function handleCancelAction(ctx: Context): Promise<void> {
     sessionManager.setSession(chatId, session);
   }
   await ctx.reply("Action cancelled.", Markup.removeKeyboard());
+}
+
+export async function handleStartAddPayee(ctx: Context): Promise<void> {
+  await requireAuth(ctx, async () => {
+    const chatId = ctx.chat!.id.toString();
+    const session = sessionManager.getSession(chatId)!;
+
+    session.lastAction = "addpayee";
+    sessionManager.setSession(chatId, session);
+
+    await ctx.replyWithMarkdown(
+      "➕ *Add Payee*\n\nPlease enter the payee's email address:",
+      Markup.inlineKeyboard([
+        [Markup.button.callback("❌ Cancel", "cancel_action")],
+      ])
+    );
+  });
+}
+
+export async function handlePayeeEmail(
+  ctx: Context,
+  email: string
+): Promise<void> {
+  const chatId = ctx.chat!.id.toString();
+  const session = sessionManager.getSession(chatId)!;
+
+  if (!email.includes("@") || !email.includes(".")) {
+    await ctx.reply(
+      "❌ Invalid email address. Please enter a valid email (e.g., user@example.com)."
+    );
+    return;
+  }
+
+  session.lastAction = `addpayee_email_${email}`;
+  sessionManager.setSession(chatId, session);
+
+  await ctx.replyWithMarkdown(
+    `➕ *Add Payee*\n\nEmail: \`${email}\`\n\nPlease enter the payee's nickname:`,
+    Markup.inlineKeyboard([
+      [Markup.button.callback("❌ Cancel", "cancel_action")],
+    ])
+  );
+}
+
+export async function handlePayeeNickname(
+  ctx: Context,
+  nickName: string
+): Promise<void> {
+  const chatId = ctx.chat!.id.toString();
+  const session = sessionManager.getSession(chatId)!;
+
+  const email = session.lastAction!.split("_email_")[1];
+
+  try {
+    await ctx.reply("🔄 Adding payee...");
+
+    const payeeData = {
+      nickName,
+      email,
+    };
+
+    const result = await createPayee(session.accessToken!, payeeData);
+
+    session.lastAction = undefined;
+    sessionManager.setSession(chatId, session);
+
+    await ctx.replyWithMarkdown(
+      `✅ *Payee Added!*\n\n` +
+        `Name: \`${result.nickName}\`\n` +
+        `Email: \`${result.email}\`\n` +
+        `ID: \`${result.id}\``,
+      Markup.inlineKeyboard([
+        [Markup.button.callback("📤 Send USDC", "start_send")],
+        [Markup.button.callback("➕ Add Another Payee", "start_addpayee")],
+      ])
+    );
+  } catch (error) {
+    const err = error as Error;
+    session.lastAction = undefined;
+    sessionManager.setSession(chatId, session);
+
+    if (err.message.includes("401")) {
+      sessionManager.deleteSession(chatId);
+      await ctx.reply(
+        "⚠️ Session expired. Please log in again.",
+        Markup.inlineKeyboard([
+          Markup.button.callback("🔑 Log In", "start_login"),
+        ])
+      );
+      return;
+    }
+    await ctx.reply(`❌ Error: ${err.message}`);
+  }
 }
 
 // Withdraw USDC command

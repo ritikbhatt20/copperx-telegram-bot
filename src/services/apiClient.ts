@@ -9,6 +9,7 @@ import {
   WalletResponse,
   HistoryResponse,
   WithdrawResponse,
+  PayeeAdditionResponse,
   ErrorResponse,
   AxiosError,
 } from "../config";
@@ -184,6 +185,47 @@ export async function withdrawToWallet(
     const axiosError = error as AxiosError<ErrorResponse>;
     throw new Error(
       `Failed to withdraw: ${
+        axiosError.response?.data?.message || axiosError.message
+      }`
+    );
+  }
+}
+
+export async function createPayee(
+  accessToken: string,
+  payeeData: {
+    nickName: string;
+    email: string;
+    firstName?: string;
+    lastName?: string;
+    phoneNumber?: string;
+    bankAccount?: {
+      country: string;
+      bankName: string;
+      bankAddress: string;
+      type: string;
+      bankAccountType: string;
+      bankRoutingNumber: string;
+      bankAccountNumber: string;
+      bankBeneficiaryName: string;
+      bankBeneficiaryAddress: string;
+      swiftCode: string;
+    };
+  }
+): Promise<PayeeAdditionResponse> {
+  try {
+    const response = await apiClient.post<PayeeAdditionResponse>(
+      "/api/payees",
+      payeeData,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }
+    );
+    return response.data;
+  } catch (error) {
+    const axiosError = error as AxiosError<ErrorResponse>;
+    throw new Error(
+      `Failed to create payee: ${
         axiosError.response?.data?.message || axiosError.message
       }`
     );

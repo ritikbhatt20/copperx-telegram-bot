@@ -28,6 +28,7 @@ export async function handleCallbackQuery(ctx: Context): Promise<void> {
     handleHelp,
     handleSetDefaultWallet, // Added
     handleSetDefaultWalletSelection, // Added
+    handleStartAddPayee,
   } = await import("./commandHandlers");
 
   // Basic commands
@@ -73,6 +74,10 @@ export async function handleCallbackQuery(ctx: Context): Promise<void> {
 
   if (data === "request_new_otp") {
     return handleRequestNewOtp(ctx);
+  }
+
+  if (data === "start_addpayee") {
+    return handleStartAddPayee(ctx);
   }
 
   // Set default wallet

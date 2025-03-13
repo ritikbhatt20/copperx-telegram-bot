@@ -234,6 +234,34 @@ export interface WithdrawResponse {
   senderDisplayName: string;
 }
 
+export interface PayeeAdditionResponse {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  organizationId: string;
+  nickName: string;
+  firstName: string | null;
+  lastName: string | null;
+  email: string;
+  phoneNumber: string | null;
+  displayName: string;
+  bankAccount: {
+    country: string;
+    bankName: string;
+    bankAddress: string;
+    type: string;
+    bankAccountType: string;
+    bankRoutingNumber: string;
+    bankAccountNumber: string;
+    bankBeneficiaryName: string;
+    bankBeneficiaryAddress: string;
+    swiftCode: string;
+  } | null;
+  isGuest: boolean;
+  hasBankAccount: boolean;
+}
+
+
 export interface ErrorResponse {
   message?: string;
   statusCode?: number;
