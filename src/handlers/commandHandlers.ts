@@ -428,9 +428,8 @@ export async function handleBalance(ctx: Context): Promise<void> {
     try {
       await ctx.reply("🔄 Fetching your wallet balances...");
 
-      // Fetch wallets and balances
       const wallets = await getWallets(session.accessToken!);
-      const balances: BalanceResponse = await getBalances(session.accessToken!); // Explicitly typed as array
+      const balances: BalanceResponse = await getBalances(session.accessToken!);
 
       if (!balances || balances.length === 0) {
         await ctx.reply(
@@ -439,7 +438,6 @@ export async function handleBalance(ctx: Context): Promise<void> {
         return;
       }
 
-      // Map wallets to their balances
       const walletMap = new Map(wallets.map((w) => [w.id, w]));
       const balanceMessage = balances
         .map(
@@ -462,16 +460,8 @@ export async function handleBalance(ctx: Context): Promise<void> {
               wallet.balances.length > 0
                 ? wallet.balances
                     .map(
-                      (b: {
-                        symbol: string;
-                        balance: string;
-                        decimals: number;
-                        address: string;
-                      }) =>
-                        `${b.symbol}: ${(
-                          parseFloat(b.balance) / Math.pow(10, b.decimals)
-                        ).toFixed(2)}`
-                    )
+                      (b) => `${b.symbol}: ${parseFloat(b.balance).toFixed(2)}`
+                    ) // No decimal adjustment
                     .join("\n")
                 : "No balances";
             return `*${networkName}${isDefault}*\n${balanceDetails}`;
