@@ -666,90 +666,138 @@ export async function handleTransactionHistory(ctx: Context): Promise<void> {
     const session = sessionManager.getSession(chatId)!;
 
     try {
-      await ctx.reply("🔄 Fetching your transaction history...");
+      await ctx.reply("💼 Fetching your transaction history...");
 
       const history = await getTransactionHistory(session.accessToken!, 1, 10); // Last 10 transactions
 
       if (!history.data || history.data.length === 0) {
         await ctx.reply(
-          "No transactions found. Start by sending or receiving USDC."
+          "✨ No transactions found. Start by sending or receiving USDC.",
+          Markup.inlineKeyboard([
+            Markup.button.callback("💵 Check Balance", "view_balance"),
+            Markup.button.callback("📤 Send USDC", "start_send"),
+          ])
         );
         return;
       }
 
+      // Format transactions with better visual hierarchy
       const transactionsMessage = history.data
         .map((tx) => {
-          // Simplify date format and use code block to avoid parsing issues
-          const date = new Date(tx.createdAt).toLocaleDateString("en-GB", {
+          // Format date in a cleaner way
+          const txDate = new Date(tx.createdAt);
+          const dateStr = txDate.toLocaleDateString("en-GB", {
             day: "2-digit",
             month: "2-digit",
             year: "numeric",
+          });
+          const timeStr = txDate.toLocaleTimeString("en-GB", {
             hour: "2-digit",
             minute: "2-digit",
-            second: "2-digit",
-          }); // e.g., "20/11/2024 12:11:26"
-          const amount = (parseFloat(tx.fromAmount) / 1e6).toFixed(2); // Assuming 6 decimals for USDC
+          });
+
+          // Correct the amount by dividing by 1e8 instead of 1e6 (removing 2 extra zeros)
+          const amount = (parseFloat(tx.fromAmount) / 1e8).toFixed(2);
           const currency = tx.fromCurrency;
 
+          // Emoji based on transaction type
+          let txEmoji = "";
           let details = "";
-          if (tx.type === "send") {
-            const toAddress = tx.toAccount.walletAddress
-              ? `${tx.toAccount.walletAddress.slice(
-                  0,
-                  6
-                )}...${tx.toAccount.walletAddress.slice(-4)}`
-              : "Unknown";
-            details = `To: \`${toAddress}\``;
-          } else if (tx.type === "receive") {
-            details = `From: \`${
-              tx.fromAccount.payeeDisplayName || "Unknown"
-            }\``;
-          } else if (tx.type === "withdraw") {
-            const toAddress = tx.toAccount.walletAddress
-              ? `${tx.toAccount.walletAddress.slice(
-                  0,
-                  6
-                )}...${tx.toAccount.walletAddress.slice(-4)}`
-              : "Unknown";
-            details = `To: \`${toAddress}\``;
-          } else if (tx.type === "deposit") {
-            details = `On: \`${
-              NETWORK_NAMES[tx.toAccount.network] || tx.toAccount.network
-            }\``;
+          let amountSign = "";
+
+          switch (tx.type) {
+            case "send":
+              txEmoji = "↗️";
+              amountSign = "-";
+              const toAddress = tx.toAccount.walletAddress
+                ? `${tx.toAccount.walletAddress.slice(
+                    0,
+                    6
+                  )}...${tx.toAccount.walletAddress.slice(-4)}`
+                : "Unknown";
+              details = `To: \`${toAddress}\``;
+              break;
+            case "receive":
+              txEmoji = "↘️";
+              amountSign = "+";
+              details = `From: \`${
+                tx.fromAccount.payeeDisplayName || "Unknown"
+              }\``;
+              break;
+            case "withdraw":
+              txEmoji = "🏧";
+              amountSign = "-";
+              const withdrawAddress = tx.toAccount.walletAddress
+                ? `${tx.toAccount.walletAddress.slice(
+                    0,
+                    6
+                  )}...${tx.toAccount.walletAddress.slice(-4)}`
+                : "Unknown";
+              details = `To: \`${withdrawAddress}\``;
+              break;
+            case "deposit":
+              txEmoji = "💰";
+              amountSign = "+";
+              details = `Network: \`${
+                NETWORK_NAMES[tx.toAccount.network] || tx.toAccount.network
+              }\``;
+              break;
           }
 
-          const amountSign =
-            tx.type === "receive" || tx.type === "deposit" ? "+" : "-";
+          // Status emoji
+          let statusEmoji = "";
+          switch (tx.status.toLowerCase()) {
+            case "success":
+              statusEmoji = "✅";
+              break;
+            case "pending":
+              statusEmoji = "⏳";
+              break;
+            case "awaiting_funds":
+              statusEmoji = "⏳";
+              break;
+            case "canceled":
+              statusEmoji = "❌";
+              break;
+            default:
+              statusEmoji = "ℹ️";
+          }
+
           return (
-            `\`${date}\`\n` + // Use code block for date instead of bold
-            `${tx.type.toUpperCase()}: ${amountSign}${amount} ${currency}\n` +
-            `Status: ${tx.status}\n` +
+            `${txEmoji} *${tx.type.toUpperCase()}* • \`${dateStr} ${timeStr}\`\n` +
+            `*${amountSign}${amount} ${currency}* ${statusEmoji} ${tx.status}\n` +
             `${details}`
           );
         })
         .join("\n\n");
 
+      const formattedMessage = `*📜 Recent Transactions*\n\n${transactionsMessage}`;
+
       try {
+        // Updated button configuration to include a Refresh button
         await ctx.replyWithMarkdown(
-          `*📜 Recent Transactions (Last 10)*\n\n${transactionsMessage}`,
+          formattedMessage,
           Markup.inlineKeyboard([
             [
               Markup.button.callback("💵 Check Balance", "view_balance"),
               Markup.button.callback("📤 Send USDC", "start_send"),
+              Markup.button.callback("🔄 Refresh", "view_history"),
             ],
           ])
         );
       } catch (markdownError) {
         // Fallback to plain text if Markdown fails
+        const plainTextMessage = formattedMessage
+          .replace(/\*/g, "")
+          .replace(/`/g, "");
+
         await ctx.reply(
-          `📜 Recent Transactions (Last 10)\n\n${transactionsMessage.replace(
-            /`/g,
-            ""
-          )}`,
+          plainTextMessage,
           Markup.inlineKeyboard([
             [
               Markup.button.callback("💵 Check Balance", "view_balance"),
               Markup.button.callback("📤 Send USDC", "start_send"),
+              Markup.button.callback("🔄 Refresh", "view_history"),
             ],
           ])
         );
