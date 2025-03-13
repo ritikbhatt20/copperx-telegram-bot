@@ -12,6 +12,10 @@ import {
   PayeeAdditionResponse,
   PayeeListResponse,
   SendResponse,
+  WalletBalanceResponse,
+  AccountListResponse,
+  OfframpQuoteResponse,
+  WithdrawToBankResponse,
   ErrorResponse,
   AxiosError,
 } from "../config";
@@ -282,6 +286,92 @@ export async function sendToUser(
     const axiosError = error as AxiosError<ErrorResponse>;
     throw new Error(
       `Failed to send payment: ${
+        axiosError.response?.data?.message || axiosError.message
+      }`
+    );
+  }
+}
+
+export async function getWalletBalance(accessToken: string): Promise<WalletBalanceResponse> {
+  try {
+    const response = await apiClient.get<WalletBalanceResponse>("/api/wallets/balance", {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    return response.data;
+  } catch (error) {
+    const axiosError = error as AxiosError<ErrorResponse>;
+    throw new Error(
+      `Failed to fetch wallet balance: ${axiosError.response?.data?.message || axiosError.message}`
+    );
+  }
+}
+
+export async function getAccounts(accessToken: string): Promise<AccountListResponse> {
+  try {
+    const response = await apiClient.get<AccountListResponse>("/api/accounts", {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    return response.data;
+  } catch (error) {
+    const axiosError = error as AxiosError<ErrorResponse>;
+    throw new Error(
+      `Failed to fetch accounts: ${axiosError.response?.data?.message || axiosError.message}`
+    );
+  }
+}
+
+// fetching the offramp to bank quotes/details
+export async function getOfframpQuote(
+  accessToken: string,
+  quoteData: {
+    amount: string;
+    currency: string;
+    destinationCountry: string;
+    onlyRemittance: boolean;
+    preferredBankAccountId: string;
+    sourceCountry: string;
+  }
+): Promise<OfframpQuoteResponse> {
+  try {
+    const response = await apiClient.post<OfframpQuoteResponse>(
+      "/api/quotes/offramp",
+      quoteData,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }
+    );
+    return response.data;
+  } catch (error) {
+    const axiosError = error as AxiosError<ErrorResponse>;
+    throw new Error(
+      `Failed to fetch offramp quote: ${
+        axiosError.response?.data?.message || axiosError.message
+      }`
+    );
+  }
+}
+
+export async function createOfframpTransfer(
+  accessToken: string,
+  transferData: {
+    purposeCode: string;
+    quotePayload: string;
+    quoteSignature: string;
+  }
+): Promise<WithdrawToBankResponse> {
+  try {
+    const response = await apiClient.post<WithdrawToBankResponse>(
+      "/api/transfers/offramp",
+      transferData,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }
+    );
+    return response.data;
+  } catch (error) {
+    const axiosError = error as AxiosError<ErrorResponse>;
+    throw new Error(
+      `Failed to create offramp transfer: ${
         axiosError.response?.data?.message || axiosError.message
       }`
     );

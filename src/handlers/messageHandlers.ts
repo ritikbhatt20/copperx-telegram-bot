@@ -7,9 +7,21 @@ export async function handleTextMessage(ctx: Context): Promise<void> {
   if (!chatId) return;
 
   const session = sessionManager.getSession(chatId);
-  if (!session) return;
+  const text = (ctx.message as Message.TextMessage)?.text?.trim();
 
-  const text = (ctx.message as Message.TextMessage).text.trim();
+  if (!text) {
+    await ctx.reply(
+      "I'm not sure what you're trying to do. Use /help to see available commands."
+    );
+    return;
+  }
+
+  if (!session) {
+    await ctx.reply(
+      "I'm not sure what you're trying to do. Use /help to see available commands."
+    );
+    return;
+  }
 
   if (session.loginState === "waiting_for_email") {
     const { handleEmailInput } = await import("./commandHandlers");
@@ -52,7 +64,12 @@ export async function handleTextMessage(ctx: Context): Promise<void> {
     return handleSendEmailAmount(ctx, text);
   }
 
-  // Other existing flows (withdraw, etc.) remain unchanged
+  if (session.lastAction === "withdraw") {
+    const { handleWithdrawAmount } = await import("./commandHandlers");
+    return handleWithdrawAmount(ctx, text);
+  }
+
+  // Fallback for any unmatched input
   await ctx.reply(
     "I'm not sure what you're trying to do. Use /help to see available commands."
   );

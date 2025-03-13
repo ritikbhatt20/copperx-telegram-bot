@@ -12,6 +12,10 @@ import {
   createPayee,
   getPayees,
   sendToUser,
+  getWalletBalance,
+  getAccounts,
+  getOfframpQuote,
+  createOfframpTransfer,
   withdrawUsdc,
   getTransactionHistory,
   withdrawToWallet,
@@ -93,8 +97,8 @@ export async function handleHelp(ctx: Context): Promise<void> {
     "*Transactions:*\n" +
     "• 💵 /balance - Check wallet balances\n" +
     "• 📤 /send - Send USDC to a wallet\n" +
-    "• 📧 /sendemail - Send USDC via email\n" + // New line
-    "• 🏦 /withdraw - Withdraw USDC\n" +
+    "• 📧 /sendemail - Send USDC via email\n" +
+    "• 🏦 /withdraw - Withdraw USDC to your bank account\n" + // Updated
     "• 📜 /history - View recent transactions\n" +
     "• ➕ /addpayee - Add a new payee\n\n" +
     "*Support:* https://t.me/copperxcommunity/2183";
@@ -107,10 +111,10 @@ export async function handleHelp(ctx: Context): Promise<void> {
         ],
         [
           Markup.button.callback("📤 Send USDC", "start_send"),
-          Markup.button.callback("📧 Send via Email", "start_sendemail"), // New button
+          Markup.button.callback("📧 Send via Email", "start_sendemail"),
         ],
         [
-          Markup.button.callback("🏦 Withdraw", "start_withdraw"),
+          Markup.button.callback("🏦 Withdraw to Bank", "start_withdraw"),
           Markup.button.callback("➕ Add Payee", "start_addpayee"),
         ],
       ]
@@ -1009,31 +1013,259 @@ export async function handleSendEmailConfirmation(
   }
 }
 
-// Withdraw USDC command
 export async function handleStartWithdraw(ctx: Context): Promise<void> {
-  const chatId = ctx.chat?.id.toString();
-  if (!chatId) return;
+  await requireAuth(ctx, async () => {
+    const chatId = ctx.chat!.id.toString();
+    const session = sessionManager.getSession(chatId)!;
 
-  if (!sessionManager.isLoggedIn(chatId)) {
+    try {
+      await ctx.reply("🔄 Fetching your balance...");
+      const balance = await getWalletBalance(session.accessToken!);
+      const usdcBalance = parseInt(balance.balance);
+
+      session.lastAction = "withdraw";
+      sessionManager.setSession(chatId, session);
+
+      await ctx.replyWithMarkdown(
+        `🏦 *Withdraw USDC to Bank*\n\nYour balance: *${usdcBalance.toFixed(
+          2
+        )} USDC*\n\nPlease enter the amount in USDC to withdraw:`,
+        Markup.inlineKeyboard([
+          [Markup.button.callback("❌ Cancel", "cancel_action")],
+        ])
+      );
+    } catch (error) {
+      const err = error as Error;
+      await ctx.reply(`❌ Error: ${err.message}`);
+    }
+  });
+}
+
+export async function handleWithdrawAmount(
+  ctx: Context,
+  amountStr: string
+): Promise<void> {
+  const chatId = ctx.chat!.id.toString();
+  const session = sessionManager.getSession(chatId)!;
+
+  const amount = parseFloat(amountStr.trim());
+  if (isNaN(amount) || amount <= 0) {
     await ctx.reply(
-      "⚠️ You need to be logged in to withdraw USDC.",
-      Markup.inlineKeyboard([
-        Markup.button.callback("🔑 Log In", "start_login"),
-      ])
+      "❌ Invalid amount. Please enter a positive number (e.g., 5)."
     );
     return;
   }
 
-  await ctx.replyWithMarkdown(
-    "*🏦 Withdraw USDC*\n\n" + "Please select which network you want to use:",
-    Markup.inlineKeyboard([
-      [
-        Markup.button.callback("Solana", "withdraw_network_solana"),
-        Markup.button.callback("Ethereum", "withdraw_network_ethereum"),
-      ],
-      [Markup.button.callback("❌ Cancel", "cancel_action")],
-    ])
+  try {
+    const balance = await getWalletBalance(session.accessToken!);
+    const usdcBalance = parseInt(balance.balance); // No division by decimals
+    if (amount > usdcBalance) {
+      await ctx.reply(
+        `❌ Insufficient balance. You have ${usdcBalance.toFixed(
+          2
+        )} USDC.`
+      );
+      return;
+    }
+
+    await ctx.reply("🔄 Fetching your bank accounts...");
+    const accounts = await getAccounts(session.accessToken!);
+    const bankAccounts = accounts.data.filter(
+      (acc) => acc.type === "bank_account" && acc.status === "verified"
+    );
+
+    if (bankAccounts.length === 0) {
+      session.lastAction = undefined;
+      sessionManager.setSession(chatId, session);
+      await ctx.replyWithMarkdown(
+        "🏦 *No Bank Accounts Found*\n\nYou need to add a bank account in Copperx to withdraw. Visit the app to add one.",
+        Markup.inlineKeyboard([
+          [Markup.button.callback("❌ Cancel", "cancel_action")],
+        ])
+      );
+      return;
+    }
+
+    const bankButtons = bankAccounts.map((acc) => ({
+      text: `${
+        acc.bankAccount!.bankName
+      } (****${acc.bankAccount!.bankAccountNumber.slice(-4)})`,
+      callback_data: `withdraw_bank_${acc.id}_${amount}`,
+    }));
+
+    session.lastAction = "withdraw_selectbank";
+    sessionManager.setSession(chatId, session);
+
+    await ctx.replyWithMarkdown(
+      `🏦 *Select Bank Account*\n\nAmount: *${amount.toFixed(
+        2
+      )} USDC*\nChoose a bank account:`,
+      Markup.inlineKeyboard(bankButtons.map((btn) => [btn]))
+    );
+  } catch (error) {
+    const err = error as Error;
+    session.lastAction = undefined;
+    sessionManager.setSession(chatId, session);
+    await ctx.reply(`❌ Error: ${err.message}`);
+  }
+}
+
+export async function handleWithdrawSelectBank(
+  ctx: Context,
+  bankAccountId: string,
+  amount: number
+): Promise<void> {
+  const chatId = ctx.chat!.id.toString();
+  const session = sessionManager.getSession(chatId)!;
+
+  console.log(
+    "handleWithdrawSelectBank called with bankAccountId:",
+    bankAccountId,
+    "amount:",
+    amount
   );
+
+  try {
+    await ctx.reply("🔄 Fetching withdrawal quote...");
+
+    const accounts = await getAccounts(session.accessToken!);
+    const bankAccount = accounts.data.find((acc) => acc.id === bankAccountId);
+    if (!bankAccount || bankAccount.type !== "bank_account") {
+      console.log(
+        "Bank account not found or invalid:",
+        bankAccountId,
+        accounts.data
+      );
+      throw new Error("Invalid bank account selected.");
+    }
+
+    const quoteData = {
+      amount: (amount * 1e8).toString(),
+      currency: "USDC",
+      destinationCountry: bankAccount.country,
+      onlyRemittance: true,
+      preferredBankAccountId: bankAccountId,
+      sourceCountry: "none",
+    };
+
+    const quote = await getOfframpQuote(session.accessToken!, quoteData);
+
+    const quotePayload = JSON.parse(quote.quotePayload);
+    const usdcAmount = parseInt(quotePayload.amount) / 1e8;
+    const inrAmount = parseInt(quotePayload.toAmount) / 1e8;
+    const fee = parseInt(quotePayload.totalFee) / 1e8;
+    const exchangeRate = parseFloat(quotePayload.rate);
+
+    // Store the full quote in session
+    session.withdrawQuote = {
+      signature: quote.quoteSignature,
+      bankAccountId: bankAccountId,
+      amount: amount,
+      payload: quote.quotePayload, // Store payload too
+    };
+    session.lastAction = "withdraw_quote";
+    sessionManager.setSession(chatId, session);
+
+    await ctx.replyWithMarkdown(
+      `🏦 *Withdrawal Details*\n\n` +
+        `Withdraw: *${usdcAmount.toFixed(2)} USDC*\n` +
+        `You’ll receive: *₹${inrAmount.toFixed(2)} INR*\n` +
+        `Exchange rate: 1 USDC ≈ ₹${exchangeRate.toFixed(2)}\n` +
+        `Fee: $${fee.toFixed(2)} USDC\n` +
+        `Arrival: ${quote.arrivalTimeMessage}\n` +
+        `Bank: ${
+          bankAccount.bankAccount!.bankName
+        } (****${bankAccount.bankAccount!.bankAccountNumber.slice(-4)})\n\n` +
+        `Press "Confirm" to proceed.`,
+      Markup.inlineKeyboard([
+        [Markup.button.callback("✅ Confirm", "confirm_withdraw")],
+        [Markup.button.callback("❌ Cancel", "cancel_action")],
+      ])
+    );
+  } catch (error) {
+    const err = error as Error;
+    session.lastAction = undefined;
+    sessionManager.setSession(chatId, session);
+    await ctx.reply(`❌ Error: ${err.message}`);
+  }
+}
+
+export async function handleWithdrawConfirmation(ctx: Context): Promise<void> {
+  const chatId = ctx.chat!.id.toString();
+  const session = sessionManager.getSession(chatId)!;
+
+  if (!session.withdrawQuote) {
+    await ctx.reply("❌ No withdrawal quote found. Please start over.");
+    session.lastAction = undefined;
+    sessionManager.setSession(chatId, session);
+    return;
+  }
+
+  const {
+    signature: quoteSignature,
+    bankAccountId,
+    amount,
+    payload: quotePayload,
+  } = session.withdrawQuote;
+
+  try {
+    await ctx.reply("🔄 Processing withdrawal...");
+
+    const accounts = await getAccounts(session.accessToken!);
+    const bankAccount = accounts.data.find((acc) => acc.id === bankAccountId);
+    if (!bankAccount) throw new Error("Bank account not found.");
+
+    const transferData = {
+      purposeCode: "self",
+      quotePayload: quotePayload, // Use stored payload
+      quoteSignature: quoteSignature, // Use stored signature
+    };
+
+    const result = await createOfframpTransfer(
+      session.accessToken!,
+      transferData
+    );
+
+    session.lastAction = undefined;
+    delete session.withdrawQuote; // Clean up
+    sessionManager.setSession(chatId, session);
+
+    const usdcAmount = parseInt(result.amount) / 1e8;
+    const inrAmount = parseInt(JSON.parse(quotePayload).toAmount) / 1e8;
+
+    await ctx.replyWithMarkdown(
+      `✅ *Withdrawal Initiated!*\n\n` +
+        `Amount: *${usdcAmount.toFixed(2)} USDC*\n` +
+        `To receive: *₹${inrAmount.toFixed(2)} INR*\n` +
+        `Transaction ID: \`${result.id}\`\n` +
+        `Status: ${result.status}\n` +
+        `Bank: ${
+          bankAccount.bankAccount!.bankName
+        } (****${bankAccount.bankAccount!.bankAccountNumber.slice(-4)})\n` +
+        `Check status: [Payment Link](${result.paymentUrl})`,
+      Markup.inlineKeyboard([
+        [Markup.button.callback("💵 Check Balance", "view_balance")],
+        [Markup.button.callback("📜 History", "view_history")],
+      ])
+    );
+  } catch (error) {
+    const err = error as Error;
+    session.lastAction = undefined;
+    delete session.withdrawQuote; // Clean up
+    sessionManager.setSession(chatId, session);
+
+    if (err.message.includes("401")) {
+      sessionManager.deleteSession(chatId);
+      await ctx.reply(
+        "⚠️ Session expired. Please log in again.",
+        Markup.inlineKeyboard([
+          Markup.button.callback("🔑 Log In", "start_login"),
+        ])
+      );
+      return;
+    }
+    await ctx.reply(`❌ Error: ${err.message}`);
+  }
 }
 
 export async function handleTransactionHistory(ctx: Context): Promise<void> {
@@ -1072,7 +1304,7 @@ export async function handleTransactionHistory(ctx: Context): Promise<void> {
             minute: "2-digit",
           });
 
-          // Correct the amount by dividing by 1e8 instead of 1e6 (removing 2 extra zeros)
+          // Correct the amount by dividing by 1e8 instead of 1e8 (removing 2 extra zeros)
           const amount = (parseFloat(tx.fromAmount) / 1e8).toFixed(2);
           const currency = tx.fromCurrency;
 
@@ -1394,112 +1626,4 @@ export async function handleSendAmountInput(
       ],
     ])
   );
-}
-
-// Handle amount input for withdrawing
-export async function handleWithdrawAmountInput(
-  ctx: Context,
-  amountStr: string
-): Promise<void> {
-  const chatId = ctx.chat?.id.toString();
-  if (!chatId) return;
-
-  const session = sessionManager.getSession(chatId);
-  if (
-    !session ||
-    !session.lastAction?.startsWith("withdraw_") ||
-    !session.accessToken
-  )
-    return;
-
-  // Parse action details
-  const parts = session.lastAction.split("_");
-  if (parts.length < 4) return;
-
-  const network = parts[1];
-  const destination = parts[3];
-
-  // Validate amount
-  const amount = parseFloat(amountStr);
-  if (isNaN(amount) || amount <= 0) {
-    await ctx.reply("⚠️ Please enter a valid amount greater than 0:");
-    return;
-  }
-
-  // Confirm transaction
-  await ctx.replyWithMarkdown(
-    `*🏦 Confirm Withdrawal*\n\n` +
-      `Withdraw: ${amount} USDC\n` +
-      `To: \`${destination}\`\n` +
-      `Network: ${network}\n\n` +
-      "Please confirm this withdrawal:",
-    Markup.inlineKeyboard([
-      [
-        Markup.button.callback(
-          "✅ Confirm",
-          `confirm_withdraw_${network}_${destination}_${amount}`
-        ),
-        Markup.button.callback("❌ Cancel", "cancel_action"),
-      ],
-    ])
-  );
-}
-
-// Handle withdraw confirmation
-export async function handleWithdrawConfirmation(
-  ctx: Context,
-  network: string,
-  destination: string,
-  amount: number
-): Promise<void> {
-  const chatId = ctx.chat?.id.toString();
-  if (!chatId) return;
-
-  const session = sessionManager.getSession(chatId);
-  if (!session || !session.accessToken) return;
-
-  try {
-    await ctx.reply("🔄 Processing your withdrawal...");
-
-    // Placeholder - replace with actual API call when available
-    // await withdrawUsdc(session.accessToken, destination, amount, network);
-
-    // Simulate successful transaction for now
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-
-    await ctx.replyWithMarkdown(
-      `✅ *Withdrawal Initiated!*\n\n` +
-        `You have withdrawn ${amount} USDC to \`${destination}\` on ${network}.\n\n` +
-        `Transaction ID: \`TX${Date.now().toString().substr(-8)}\`\n\n` +
-        `Please allow some time for the transaction to be confirmed on the blockchain.`,
-      Markup.inlineKeyboard([
-        [
-          Markup.button.callback("💵 Check Balance", "view_balance"),
-          Markup.button.callback("📜 View History", "view_history"),
-        ],
-        [Markup.button.callback("🏦 Withdraw Again", "start_withdraw")],
-      ])
-    );
-  } catch (error) {
-    const err = error as Error;
-
-    if (err.message.includes("401") || err.message.includes("unauthorized")) {
-      sessionManager.deleteSession(chatId);
-      await ctx.reply(
-        "⚠️ Your session has expired. Please log in again.",
-        Markup.inlineKeyboard([
-          Markup.button.callback("🔑 Log In", "start_login"),
-        ])
-      );
-      return;
-    }
-
-    await ctx.reply(
-      `❌ Error: ${err.message}\n\nYour withdrawal could not be processed.`,
-      Markup.inlineKeyboard([
-        Markup.button.callback("🔄 Try Again", "start_withdraw"),
-        Markup.button.callback("💵 Check Balance", "view_balance"),
-      ])
-    );
-  }
 }

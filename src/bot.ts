@@ -10,11 +10,11 @@ import {
   handleKycStatus,
   handleBalance,
   handleStartSend,
-  handleStartWithdraw,
   handleTransactionHistory,
   handleSetDefaultWallet,
   handleStartAddPayee,
   handleStartSendEmail,
+  handleStartWithdraw,
 } from "./handlers/commandHandlers";
 
 export const bot = new Telegraf(process.env.BOT_TOKEN || "");
@@ -29,10 +29,10 @@ bot.command("kyc", handleKycStatus);
 bot.command("balance", handleBalance);
 bot.command("setdefault", handleSetDefaultWallet);
 bot.command("send", handleStartSend);
-bot.command("withdraw", handleStartWithdraw);
 bot.command("history", handleTransactionHistory);
 bot.command("addpayee", handleStartAddPayee);
 bot.command("sendemail", handleStartSendEmail);
+bot.command("withdraw", handleStartWithdraw);
 
 bot.on(message("text"), handleTextMessage);
 

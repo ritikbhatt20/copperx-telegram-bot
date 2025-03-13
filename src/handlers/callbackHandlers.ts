@@ -17,7 +17,6 @@ export async function handleCallbackQuery(ctx: Context): Promise<void> {
     handleKycStatus,
     handleBalance,
     handleStartSend,
-    handleStartWithdraw,
     handleTransactionHistory,
     handleCancelAction,
     handleRequestNewOtp,
@@ -26,7 +25,12 @@ export async function handleCallbackQuery(ctx: Context): Promise<void> {
     handleStartSendEmail,
     handleSendEmailPayee,
     handleSendEmailConfirmation,
+    handleStartWithdraw,
+    handleWithdrawSelectBank,
+    handleWithdrawConfirmation,
   } = await import("./commandHandlers");
+
+  console.log("Callback data received:", data);
 
   if (data === "start_login") return handleStartLogin(ctx);
   if (data === "logout") return handleLogout(ctx);
@@ -34,11 +38,11 @@ export async function handleCallbackQuery(ctx: Context): Promise<void> {
   if (data === "view_kyc") return handleKycStatus(ctx);
   if (data === "view_balance") return handleBalance(ctx);
   if (data === "start_send") return handleStartSend(ctx);
-  if (data === "start_withdraw") return handleStartWithdraw(ctx);
   if (data === "view_history") return handleTransactionHistory(ctx);
   if (data === "cancel_action") return handleCancelAction(ctx);
   if (data === "start_addpayee") return handleStartAddPayee(ctx);
   if (data === "start_sendemail") return handleStartSendEmail(ctx);
+  if (data === "start_withdraw") return handleStartWithdraw(ctx);
 
   if (data.startsWith("sendemail_to_")) {
     const email = data.replace("sendemail_to_", "");
@@ -47,20 +51,36 @@ export async function handleCallbackQuery(ctx: Context): Promise<void> {
 
   if (data.startsWith("confirm_sendemail_")) {
     const parts = data.replace("confirm_sendemail_", "").split("_");
-    if (parts.length >= 2) {
-      const email = parts[0];
-      const amount = parseFloat(parts[1]);
-      return handleSendEmailConfirmation(ctx, email, amount);
-    }
+    if (parts.length >= 2)
+      return handleSendEmailConfirmation(ctx, parts[0], parseFloat(parts[1]));
   }
 
   if (data.startsWith("confirm_send_")) {
     const parts = data.replace("confirm_send_", "").split("_");
-    if (parts.length >= 2) {
-      const walletAddress = parts[0];
-      const amount = parseFloat(parts[1]);
-      return handleSendConfirmation(ctx, walletAddress, amount);
+    if (parts.length >= 2)
+      return handleSendConfirmation(ctx, parts[0], parseFloat(parts[1]));
+  }
+
+  if (data.startsWith("withdraw_bank_")) {
+    const parts = data.split("_");
+    if (parts.length !== 4) {
+      console.log("Invalid withdraw_bank callback format:", data);
+      await ctx.reply("❌ Invalid selection. Please try again.");
+      return;
     }
+    const [, , bankId, amountStr] = parts;
+    console.log("Parsed bankId:", bankId, "amount:", amountStr);
+    const amount = parseFloat(amountStr);
+    if (isNaN(amount)) {
+      console.log("Invalid amount in callback:", amountStr);
+      await ctx.reply("❌ Invalid amount. Please try again.");
+      return;
+    }
+    return handleWithdrawSelectBank(ctx, bankId, amount);
+  }
+
+  if (data === "confirm_withdraw") {
+    return handleWithdrawConfirmation(ctx); // Updated to use session data
   }
 
   await ctx.reply("Unknown action. Use /help for commands.");

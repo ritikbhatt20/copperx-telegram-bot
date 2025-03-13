@@ -18,6 +18,12 @@ export interface UserSession {
   otpRequestedAt?: Date;
   loginState?: "waiting_for_email" | "waiting_for_otp" | "logged_in";
   lastAction?: string;
+  withdrawQuote?: {
+    signature: string;
+    bankAccountId: string;
+    amount: number;
+    payload: string;
+  };
 }
 
 // Define response types
@@ -70,6 +76,51 @@ export type BalanceResponse = Array<{
     address: string;
   }>;
 }>;
+
+// for the offramp to bank
+export interface WalletBalanceResponse {
+  balance: string;
+  decimals: number;
+  symbol: string;
+  address: string;
+}
+
+export interface AccountListResponse {
+  data: Array<{
+    id: string;
+    createdAt: string;
+    updatedAt: string;
+    organizationId: string;
+    type: string;
+    walletAccountType: string | null;
+    isDefault: boolean;
+    country: string;
+    network: string | null;
+    walletAddress: string | null;
+    bankAccount?: {
+      bankName: string;
+      bankAddress: string;
+      bankAccountType: string;
+      bankRoutingNumber: string;
+      bankAccountNumber: string;
+      bankBeneficiaryName: string;
+      swiftCode: string;
+      method: string;
+    };
+    method: string;
+    accountKycs: Array<{
+      id: string;
+      createdAt: string;
+      updatedAt: string;
+      accountId: string;
+      providerId: string;
+      status: string;
+      providerCode: string;
+      supportRemittance: boolean;
+    }>;
+    status: string;
+  }>;
+}
 
 export interface WalletResponse {
   id: string;
@@ -341,6 +392,80 @@ export interface SendResponse {
     payeeId: string | null;
     payeeEmail: string | null;
     payeeDisplayName: string | null;
+  };
+}
+
+export interface OfframpQuoteResponse {
+  minAmount: string;
+  maxAmount: string;
+  arrivalTimeMessage: string;
+  provider: {
+    id: string;
+    createdAt: string;
+    updatedAt: string;
+    organizationId: string;
+    status: string;
+    providerCode: string;
+    externalKycId: string | null;
+    externalCustomerId: string | null;
+    providerData: Record<string, any>;
+    country: string;
+    supportRemittance: boolean;
+  };
+  error: string | null;
+  quotePayload: string;
+  quoteSignature: string;
+}
+
+export interface WithdrawToBankResponse {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  organizationId: string;
+  status: string;
+  customerId: string | null;
+  type: string;
+  amount: string;
+  currency: string;
+  amountSubtotal: string;
+  totalFee: string;
+  feeCurrency: string;
+  invoiceNumber: string | null;
+  invoiceUrl: string | null;
+  purposeCode: string;
+  sourceAccountId: string;
+  destinationAccountId: string;
+  sourceCountry: string;
+  sourceOfFundsFile: string | null;
+  note: string | null;
+  destinationCountry: string;
+  isThirdPartyPayment: boolean;
+  destinationCurrency: string;
+  mode: string;
+  feePercentage: string;
+  paymentUrl: string;
+  senderDisplayName: string;
+  sourceAccount: {
+    id: string;
+    createdAt: string;
+    updatedAt: string;
+    type: string;
+    network: string;
+    accountId: string;
+    walletAddress: string;
+  };
+  destinationAccount: {
+    id: string;
+    createdAt: string;
+    updatedAt: string;
+    type: string;
+    network: string | null;
+    accountId: string | null;
+    walletAddress: string | null;
+    bankName: string;
+    bankAddress: string;
+    bankRoutingNumber: string;
+    bankAccountNumber: string;
   };
 }
 
