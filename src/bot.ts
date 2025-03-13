@@ -14,6 +14,7 @@ import {
   handleTransactionHistory,
   handleSetDefaultWallet,
   handleStartAddPayee,
+  handleStartSendEmail,
 } from "./handlers/commandHandlers";
 
 export const bot = new Telegraf(process.env.BOT_TOKEN || "");
@@ -31,6 +32,7 @@ bot.command("send", handleStartSend);
 bot.command("withdraw", handleStartWithdraw);
 bot.command("history", handleTransactionHistory);
 bot.command("addpayee", handleStartAddPayee);
+bot.command("sendemail", handleStartSendEmail);
 
 bot.on(message("text"), handleTextMessage);
 

@@ -10,6 +10,8 @@ import {
   HistoryResponse,
   WithdrawResponse,
   PayeeAdditionResponse,
+  PayeeListResponse,
+  SendResponse,
   ErrorResponse,
   AxiosError,
 } from "../config";
@@ -191,6 +193,7 @@ export async function withdrawToWallet(
   }
 }
 
+// Addition of payee
 export async function createPayee(
   accessToken: string,
   payeeData: {
@@ -232,24 +235,53 @@ export async function createPayee(
   }
 }
 
-// Send USDC to email or wallet
-export async function sendUsdc(
+// fetch the list of payees
+export async function getPayees(
   accessToken: string,
-  recipient: string,
-  amount: number,
-  network: string = "solana"
-): Promise<any> {
+  page: number = 1,
+  limit: number = 10
+): Promise<PayeeListResponse> {
   try {
-    const response = await apiClient.post(
-      "/api/transactions/send",
-      { recipient, amount, currency: "USDC", network },
-      { headers: { Authorization: `Bearer ${accessToken}` } }
+    const response = await apiClient.get<PayeeListResponse>("/api/payees", {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      params: { page, limit },
+    });
+    return response.data;
+  } catch (error) {
+    const axiosError = error as AxiosError<ErrorResponse>;
+    throw new Error(
+      `Failed to fetch payees: ${
+        axiosError.response?.data?.message || axiosError.message
+      }`
+    );
+  }
+}
+
+// sending usdc using email
+export async function sendToUser(
+  accessToken: string,
+  sendData: {
+    email?: string;
+    walletAddress?: string;
+    payeeId?: string;
+    amount: string;
+    purposeCode: string;
+    currency: string;
+  }
+): Promise<SendResponse> {
+  try {
+    const response = await apiClient.post<SendResponse>(
+      "/api/transfers/send",
+      sendData,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }
     );
     return response.data;
   } catch (error) {
     const axiosError = error as AxiosError<ErrorResponse>;
     throw new Error(
-      `Failed to send USDC: ${
+      `Failed to send payment: ${
         axiosError.response?.data?.message || axiosError.message
       }`
     );

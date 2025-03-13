@@ -10,7 +10,8 @@ import {
   getWallets,
   setDefaultWallet,
   createPayee,
-  sendUsdc,
+  getPayees,
+  sendToUser,
   withdrawUsdc,
   getTransactionHistory,
   withdrawToWallet,
@@ -91,11 +92,12 @@ export async function handleHelp(ctx: Context): Promise<void> {
     "• 🏦 /setdefault - Set your default wallet\n\n" +
     "*Transactions:*\n" +
     "• 💵 /balance - Check wallet balances\n" +
-    "• 📤 /send - Send USDC\n" +
+    "• 📤 /send - Send USDC to a wallet\n" +
+    "• 📧 /sendemail - Send USDC via email\n" + // New line
     "• 🏦 /withdraw - Withdraw USDC\n" +
     "• 📜 /history - View recent transactions\n" +
-    "• ➕ /addpayee - Add a new payee\n\n" + // Added /addpayee here
-    `*Support:* ${CONFIG.SUPPORT_LINK}`;
+    "• ➕ /addpayee - Add a new payee\n\n" +
+    "*Support:* https://t.me/copperxcommunity/2183";
 
   const keyboardButtons = isLoggedIn
     ? [
@@ -105,9 +107,12 @@ export async function handleHelp(ctx: Context): Promise<void> {
         ],
         [
           Markup.button.callback("📤 Send USDC", "start_send"),
-          Markup.button.callback("🏦 Withdraw", "start_withdraw"),
+          Markup.button.callback("📧 Send via Email", "start_sendemail"), // New button
         ],
-        [Markup.button.callback("➕ Add Payee", "start_addpayee")], // Added inline button
+        [
+          Markup.button.callback("🏦 Withdraw", "start_withdraw"),
+          Markup.button.callback("➕ Add Payee", "start_addpayee"),
+        ],
       ]
     : [[Markup.button.callback("🔑 Log In", "start_login")]];
 
@@ -824,6 +829,165 @@ export async function handlePayeeNickname(
       Markup.inlineKeyboard([
         [Markup.button.callback("📤 Send USDC", "start_send")],
         [Markup.button.callback("➕ Add Another Payee", "start_addpayee")],
+      ])
+    );
+  } catch (error) {
+    const err = error as Error;
+    session.lastAction = undefined;
+    sessionManager.setSession(chatId, session);
+
+    if (err.message.includes("401")) {
+      sessionManager.deleteSession(chatId);
+      await ctx.reply(
+        "⚠️ Session expired. Please log in again.",
+        Markup.inlineKeyboard([
+          Markup.button.callback("🔑 Log In", "start_login"),
+        ])
+      );
+      return;
+    }
+    await ctx.reply(`❌ Error: ${err.message}`);
+  }
+}
+
+export async function handleStartSendEmail(ctx: Context): Promise<void> {
+  await requireAuth(ctx, async () => {
+    const chatId = ctx.chat!.id.toString();
+    const session = sessionManager.getSession(chatId)!;
+
+    try {
+      await ctx.reply("🔄 Fetching your payees...");
+      const payees = await getPayees(session.accessToken!);
+
+      if (payees.count === 0) {
+        session.lastAction = undefined;
+        sessionManager.setSession(chatId, session);
+        await ctx.replyWithMarkdown(
+          "📭 *No Payees Found*\n\nYou need to add a payee before sending USDC via email. Use /addpayee to add one now.",
+          {
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: "➕ Add Payee", callback_data: "start_addpayee" }],
+              ],
+            },
+          }
+        );
+        return;
+      }
+
+      const payeeButtons = payees.data.map((payee) => ({
+        text: `${payee.displayName} (${payee.email})`,
+        callback_data: `sendemail_to_${payee.email}`,
+      }));
+
+      session.lastAction = "sendemail";
+      sessionManager.setSession(chatId, session);
+
+      await ctx.replyWithMarkdown(
+        "📤 *Send USDC via Email*\n\nChoose a payee to send USDC to:",
+        {
+          reply_markup: {
+            inline_keyboard: payeeButtons.map((btn) => [btn]),
+          },
+        }
+      );
+    } catch (error) {
+      const err = error as Error;
+      session.lastAction = undefined;
+      sessionManager.setSession(chatId, session);
+      await ctx.reply(`❌ Error: ${err.message}`);
+    }
+  });
+}
+
+export async function handleSendEmailPayee(
+  ctx: Context,
+  email: string
+): Promise<void> {
+  const chatId = ctx.chat!.id.toString();
+  const session = sessionManager.getSession(chatId)!;
+
+  session.lastAction = `sendemail_to_${email}`;
+  sessionManager.setSession(chatId, session);
+
+  await ctx.replyWithMarkdown(
+    `📤 *Send USDC via Email*\n\nEmail: \`${email}\`\n\nPlease enter the amount in USDC:`,
+    Markup.inlineKeyboard([
+      [Markup.button.callback("❌ Cancel", "cancel_action")],
+    ])
+  );
+}
+
+export async function handleSendEmailAmount(
+  ctx: Context,
+  amountStr: string
+): Promise<void> {
+  const chatId = ctx.chat!.id.toString();
+  const session = sessionManager.getSession(chatId)!;
+
+  const amount = parseFloat(amountStr.trim());
+  if (isNaN(amount) || amount <= 0) {
+    await ctx.reply(
+      "❌ Invalid amount. Please enter a positive number (e.g., 5)."
+    );
+    return;
+  }
+
+  const email = session.lastAction!.split("_to_")[1];
+  session.lastAction = `sendemail_to_${email}_amount_${amount}`;
+  sessionManager.setSession(chatId, session);
+
+  await ctx.replyWithMarkdown(
+    `📤 *Confirm Send via Email*\n\n` +
+      `To: \`${email}\`\n` +
+      `Amount: *${amount.toFixed(2)} USDC*\n\n` +
+      `Press "Confirm" to send the funds.`,
+    Markup.inlineKeyboard([
+      [
+        Markup.button.callback(
+          "✅ Confirm",
+          `confirm_sendemail_${email}_${amount}`
+        ),
+      ],
+      [Markup.button.callback("❌ Cancel", "cancel_action")],
+    ])
+  );
+}
+
+export async function handleSendEmailConfirmation(
+  ctx: Context,
+  email: string,
+  amount: number
+): Promise<void> {
+  const chatId = ctx.chat!.id.toString();
+  const session = sessionManager.getSession(chatId);
+
+  if (!session || !session.accessToken) return;
+
+  try {
+    await ctx.reply("🔄 Sending funds...");
+
+    const sendData = {
+      email,
+      amount: (amount * 1e8).toString(), // 10^8 scale
+      purposeCode: "self",
+      currency: "USDC",
+    };
+
+    const result = await sendToUser(session.accessToken, sendData);
+
+    session.lastAction = undefined;
+    sessionManager.setSession(chatId, session);
+
+    await ctx.replyWithMarkdown(
+      `✅ *Funds Sent!*\n\n` +
+        `To: \`${email}\`\n` +
+        `Amount: *${amount.toFixed(2)} USDC*\n` +
+        `Transaction ID: \`${result.id}\`\n` +
+        `Status: ${result.status}`,
+      Markup.inlineKeyboard([
+        [Markup.button.callback("💵 Check Balance", "view_balance")],
+        [Markup.button.callback("📜 History", "view_history")],
       ])
     );
   } catch (error) {

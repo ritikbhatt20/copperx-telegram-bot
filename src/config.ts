@@ -261,6 +261,88 @@ export interface PayeeAdditionResponse {
   hasBankAccount: boolean;
 }
 
+export interface PayeeListResponse {
+  page: number;
+  limit: number;
+  count: number;
+  hasMore: boolean;
+  data: Array<{
+    id: string;
+    createdAt: string;
+    updatedAt: string;
+    organizationId: string;
+    nickName: string;
+    firstName: string | null;
+    lastName: string | null;
+    email: string;
+    phoneNumber: string | null;
+    displayName: string;
+    bankAccount: {
+      country: string;
+      bankName: string;
+      bankAddress: string;
+      type: string;
+      bankAccountType: string;
+      bankRoutingNumber: string;
+      bankAccountNumber: string;
+      bankBeneficiaryName: string;
+      bankBeneficiaryAddress: string;
+      swiftCode: string;
+    } | null;
+    isGuest: boolean;
+    hasBankAccount: boolean;
+  }>;
+}
+
+export interface SendResponse {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  organizationId: string;
+  status: string;
+  customerId: string | null;
+  type: string;
+  sourceCountry: string;
+  destinationCountry: string;
+  destinationCurrency: string | null;
+  amount: string;
+  currency: string;
+  amountSubtotal: string;
+  totalFee: string;
+  feeCurrency: string;
+  invoiceNumber: string | null;
+  invoiceUrl: string | null;
+  purposeCode: string;
+  sourceOfFundsFile: string | null;
+  note: string | null;
+  sourceAccountId: string;
+  destinationAccountId: string;
+  mode: string;
+  senderDisplayName: string;
+  sourceAccount: {
+    id: string;
+    createdAt: string;
+    updatedAt: string;
+    type: string;
+    network: string;
+    accountId: string | null;
+    walletAddress: string | null;
+    country: string;
+  };
+  destinationAccount: {
+    id: string;
+    createdAt: string;
+    updatedAt: string;
+    type: string;
+    network: string;
+    accountId: string | null;
+    walletAddress: string | null;
+    country: string;
+    payeeId: string | null;
+    payeeEmail: string | null;
+    payeeDisplayName: string | null;
+  };
+}
 
 export interface ErrorResponse {
   message?: string;
