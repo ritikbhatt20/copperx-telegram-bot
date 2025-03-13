@@ -153,6 +153,87 @@ export interface HistoryResponse {
   }>;
 }
 
+export interface WithdrawResponse {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  organizationId: string;
+  status: string;
+  customerId: string | null;
+  customer?: {
+    id: string;
+    createdAt: string;
+    updatedAt: string;
+    name: string;
+    businessName: string;
+    email: string;
+    country: string;
+  };
+  type: string;
+  sourceCountry: string;
+  destinationCountry: string;
+  destinationCurrency: string;
+  amount: string;
+  currency: string;
+  amountSubtotal: string;
+  totalFee: string;
+  feePercentage: string | null;
+  feeCurrency: string;
+  invoiceNumber: string | null;
+  invoiceUrl: string | null;
+  sourceOfFundsFile: string | null;
+  note: string | null;
+  purposeCode: string;
+  sourceOfFunds: string | null;
+  recipientRelationship: string | null;
+  sourceAccountId: string;
+  destinationAccountId: string;
+  paymentUrl: string | null;
+  mode: string;
+  isThirdPartyPayment: boolean | null;
+  sourceAccount: {
+    id: string;
+    createdAt: string;
+    updatedAt: string;
+    type: string;
+    country: string;
+    network: string;
+    accountId: string | null;
+    walletAddress: string | null;
+    bankName: string | null;
+    bankAddress: string | null;
+    bankRoutingNumber: string | null;
+    bankAccountNumber: string | null;
+    bankDepositMessage: string | null;
+    wireMessage: string | null;
+    payeeEmail: string | null;
+    payeeOrganizationId: string | null;
+    payeeId: string | null;
+    payeeDisplayName: string | null;
+  };
+  destinationAccount: {
+    id: string;
+    createdAt: string;
+    updatedAt: string;
+    type: string;
+    country: string;
+    network: string;
+    accountId: string | null;
+    walletAddress: string | null;
+    bankName: string | null;
+    bankAddress: string | null;
+    bankRoutingNumber: string | null;
+    bankAccountNumber: string | null;
+    bankDepositMessage: string | null;
+    wireMessage: string | null;
+    payeeEmail: string | null;
+    payeeOrganizationId: string | null;
+    payeeId: string | null;
+    payeeDisplayName: string | null;
+  };
+  senderDisplayName: string;
+}
+
 export interface ErrorResponse {
   message?: string;
   statusCode?: number;

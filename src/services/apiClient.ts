@@ -8,6 +8,7 @@ import {
   BalanceResponse,
   WalletResponse,
   HistoryResponse,
+  WithdrawResponse,
   ErrorResponse,
   AxiosError,
 } from "../config";
@@ -154,6 +155,35 @@ export async function setDefaultWallet(
     const axiosError = error as AxiosError<ErrorResponse>;
     throw new Error(
       `Failed to set default wallet: ${
+        axiosError.response?.data?.message || axiosError.message
+      }`
+    );
+  }
+}
+
+// withdraw to external wallet
+export async function withdrawToWallet(
+  accessToken: string,
+  withdrawData: {
+    walletAddress: string;
+    amount: string;
+    purposeCode: string;
+    currency: string;
+  }
+): Promise<WithdrawResponse> {
+  try {
+    const response = await apiClient.post<WithdrawResponse>(
+      "/api/transfers/wallet-withdraw",
+      withdrawData,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }
+    );
+    return response.data;
+  } catch (error) {
+    const axiosError = error as AxiosError<ErrorResponse>;
+    throw new Error(
+      `Failed to withdraw: ${
         axiosError.response?.data?.message || axiosError.message
       }`
     );

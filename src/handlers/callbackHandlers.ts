@@ -85,6 +85,15 @@ export async function handleCallbackQuery(ctx: Context): Promise<void> {
     return handleSetDefaultWalletSelection(ctx, walletId);
   }
 
+  if (data.startsWith("confirm_send_")) {
+    const parts = data.replace("confirm_send_", "").split("_");
+    if (parts.length >= 2) {
+      const walletAddress = parts[0];
+      const amount = parseFloat(parts[1]);
+      return handleSendConfirmation(ctx, walletAddress, amount);
+    }
+  }
+
   // Network selection for send
   if (data.startsWith("send_network_")) {
     const network = data.replace("send_network_", "");
@@ -95,17 +104,6 @@ export async function handleCallbackQuery(ctx: Context): Promise<void> {
   if (data.startsWith("withdraw_network_")) {
     const network = data.replace("withdraw_network_", "");
     return handleWithdrawNetworkSelection(ctx, network);
-  }
-
-  // Transaction confirmations
-  if (data.startsWith("confirm_send_")) {
-    const parts = data.replace("confirm_send_", "").split("_");
-    if (parts.length >= 3) {
-      const network = parts[0];
-      const recipient = parts[1];
-      const amount = parseFloat(parts[2]);
-      return handleSendConfirmation(ctx, network, recipient, amount);
-    }
   }
 
   if (data.startsWith("confirm_withdraw_")) {

@@ -12,9 +12,18 @@ import {
   sendUsdc,
   withdrawUsdc,
   getTransactionHistory,
+  withdrawToWallet,
 } from "../services/apiClient";
 import { BalanceResponse } from "../config";
 import { CONFIG, NETWORK_NAMES } from "../config";
+
+interface SendState {
+  step: "address" | "amount" | "confirm";
+  walletAddress?: string;
+  amount?: number;
+}
+
+const sendStates = new Map<string, SendState>();
 
 // Helper function to check login and handle unauthorized users
 function requireAuth(ctx: Context, next: () => Promise<void>): Promise<void> {
@@ -596,31 +605,141 @@ export async function handleSetDefaultWalletSelection(
   }
 }
 
-// Send USDC command
 export async function handleStartSend(ctx: Context): Promise<void> {
-  const chatId = ctx.chat?.id.toString();
-  if (!chatId) return;
+  await requireAuth(ctx, async () => {
+    const chatId = ctx.chat!.id.toString();
+    sendStates.set(chatId, { step: "address" });
 
-  if (!sessionManager.isLoggedIn(chatId)) {
-    await ctx.reply(
-      "⚠️ You need to be logged in to send USDC.",
+    await ctx.replyWithMarkdown(
+      "📤 *Send USDC*\n\nPlease enter the wallet address to send funds to:",
       Markup.inlineKeyboard([
-        Markup.button.callback("🔑 Log In", "start_login"),
+        [Markup.button.callback("❌ Cancel", "cancel_action")],
       ])
+    );
+  });
+}
+
+export async function handleSendAddress(ctx: Context): Promise<void> {
+  const chatId = ctx.chat!.id.toString();
+  const state = sendStates.get(chatId);
+  const message = ctx.message;
+
+  if (!state || state.step !== "address" || !message || !("text" in message))
+    return;
+
+  const walletAddress = message.text.trim();
+  if (!walletAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
+    await ctx.reply(
+      "❌ Invalid wallet address. Please enter a valid Ethereum address (e.g., 0x...)."
     );
     return;
   }
 
+  sendStates.set(chatId, { step: "amount", walletAddress });
   await ctx.replyWithMarkdown(
-    "*📤 Send USDC*\n\n" + "Please select which network you want to use:",
+    `📤 *Send USDC*\n\nWallet address: \`${walletAddress}\`\n\nPlease enter the amount in USDC:`,
+    Markup.inlineKeyboard([
+      [Markup.button.callback("❌ Cancel", "cancel_action")],
+    ])
+  );
+}
+
+export async function handleSendAmount(ctx: Context): Promise<void> {
+  const chatId = ctx.chat!.id.toString();
+  const state = sendStates.get(chatId);
+  const message = ctx.message;
+
+  if (!state || state.step !== "amount" || !message || !("text" in message))
+    return;
+
+  const amount = parseFloat(message.text.trim());
+  if (isNaN(amount) || amount <= 0) {
+    await ctx.reply(
+      "❌ Invalid amount. Please enter a positive number (e.g., 5)."
+    );
+    return;
+  }
+
+  sendStates.set(chatId, {
+    step: "confirm",
+    walletAddress: state.walletAddress,
+    amount,
+  });
+  await ctx.replyWithMarkdown(
+    `📤 *Confirm Send*\n\n` +
+      `To: \`${state.walletAddress}\`\n` +
+      `Amount: *${amount.toFixed(2)} USDC*\n\n` +
+      `Press "Confirm" to send the funds.`,
     Markup.inlineKeyboard([
       [
-        Markup.button.callback("Solana", "send_network_solana"),
-        Markup.button.callback("Ethereum", "send_network_ethereum"),
+        Markup.button.callback(
+          "✅ Confirm",
+          `confirm_send_${state.walletAddress}_${amount}`
+        ),
       ],
       [Markup.button.callback("❌ Cancel", "cancel_action")],
     ])
   );
+}
+
+export async function handleSendConfirmation(
+  ctx: Context,
+  walletAddress: string,
+  amount: number
+): Promise<void> {
+  const chatId = ctx.chat!.id.toString();
+  const session = sessionManager.getSession(chatId);
+
+  if (!session || !session.accessToken) return;
+
+  try {
+    await ctx.reply("🔄 Sending funds...");
+
+    const withdrawData = {
+      walletAddress,
+      amount: (amount * 1e8).toString(), // Convert to 10^8 scale (e.g., 5 USDC = 500000000)
+      purposeCode: "self",
+      currency: "USDC",
+    };
+
+    const result = await withdrawToWallet(session.accessToken, withdrawData);
+
+    sendStates.delete(chatId); // Clear state on success
+
+    await ctx.replyWithMarkdown(
+      `✅ *Funds Sent!*\n\n` +
+        `To: \`${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}\`\n` +
+        `Amount: *${amount.toFixed(2)} USDC*\n` +
+        `Transaction ID: \`${result.id}\`\n` +
+        `Status: ${result.status}`,
+      Markup.inlineKeyboard([
+        [Markup.button.callback("💵 Check Balance", "view_balance")],
+        [Markup.button.callback("📜 History", "view_history")],
+      ])
+    );
+  } catch (error) {
+    const err = error as Error;
+    if (err.message.includes("401")) {
+      sessionManager.deleteSession(chatId);
+      await ctx.reply(
+        "⚠️ Session expired. Please log in again.",
+        Markup.inlineKeyboard([
+          Markup.button.callback("🔑 Log In", "start_login"),
+        ])
+      );
+      return;
+    }
+    await ctx.reply(`❌ Error: ${err.message}`);
+  } finally {
+    sendStates.delete(chatId); // Clear state on error too
+  }
+}
+
+// Update handleCancelAction to clear send state
+export async function handleCancelAction(ctx: Context): Promise<void> {
+  const chatId = ctx.chat!.id.toString();
+  sendStates.delete(chatId);
+  await ctx.reply("Action cancelled.", Markup.removeKeyboard());
 }
 
 // Withdraw USDC command
@@ -807,19 +926,6 @@ export async function handleTransactionHistory(ctx: Context): Promise<void> {
       await ctx.reply(`❌ Error: ${err.message}`);
     }
   });
-}
-
-// Cancel action
-export async function handleCancelAction(ctx: Context): Promise<void> {
-  await ctx.reply(
-    "✅ Action cancelled. What would you like to do next?",
-    Markup.inlineKeyboard([
-      [
-        Markup.button.callback("🔑 Log In", "start_login"),
-        Markup.button.callback("❓ Help", "show_help"),
-      ],
-    ])
-  );
 }
 
 // Request new OTP
@@ -1070,64 +1176,6 @@ export async function handleWithdrawAmountInput(
       ],
     ])
   );
-}
-
-// Handle send confirmation
-export async function handleSendConfirmation(
-  ctx: Context,
-  network: string,
-  recipient: string,
-  amount: number
-): Promise<void> {
-  const chatId = ctx.chat?.id.toString();
-  if (!chatId) return;
-
-  const session = sessionManager.getSession(chatId);
-  if (!session || !session.accessToken) return;
-
-  try {
-    await ctx.reply("🔄 Processing your transaction...");
-
-    // Placeholder - replace with actual API call when available
-    // await sendUsdc(session.accessToken, recipient, amount, network);
-
-    // Simulate successful transaction for now
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-
-    await ctx.replyWithMarkdown(
-      `✅ *Transaction Successful!*\n\n` +
-        `You have sent ${amount} USDC to \`${recipient}\` on ${network}.\n\n` +
-        `Transaction ID: \`TX${Date.now().toString().substr(-8)}\``,
-      Markup.inlineKeyboard([
-        [
-          Markup.button.callback("💵 Check Balance", "view_balance"),
-          Markup.button.callback("📜 View History", "view_history"),
-        ],
-        [Markup.button.callback("📤 Send Again", "start_send")],
-      ])
-    );
-  } catch (error) {
-    const err = error as Error;
-
-    if (err.message.includes("401") || err.message.includes("unauthorized")) {
-      sessionManager.deleteSession(chatId);
-      await ctx.reply(
-        "⚠️ Your session has expired. Please log in again.",
-        Markup.inlineKeyboard([
-          Markup.button.callback("🔑 Log In", "start_login"),
-        ])
-      );
-      return;
-    }
-
-    await ctx.reply(
-      `❌ Error: ${err.message}\n\nYour transaction could not be processed.`,
-      Markup.inlineKeyboard([
-        Markup.button.callback("🔄 Try Again", "start_send"),
-        Markup.button.callback("💵 Check Balance", "view_balance"),
-      ])
-    );
-  }
 }
 
 // Handle withdraw confirmation
