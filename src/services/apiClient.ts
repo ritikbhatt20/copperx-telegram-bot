@@ -7,6 +7,7 @@ import {
   KycResponse,
   BalanceResponse,
   WalletResponse,
+  HistoryResponse,
   ErrorResponse,
   AxiosError,
 } from "../config";
@@ -139,23 +140,25 @@ export async function getWallets(
 
 // set default wallet
 export async function setDefaultWallet(
-    accessToken: string,
-    walletId: string
-  ): Promise<WalletResponse> {
-    try {
-      const response = await apiClient.post<WalletResponse>(
-        "/api/wallets/default",
-        { walletId },
-        { headers: { Authorization: `Bearer ${accessToken}` } }
-      );
-      return response.data;
-    } catch (error) {
-      const axiosError = error as AxiosError<ErrorResponse>;
-      throw new Error(
-        `Failed to set default wallet: ${axiosError.response?.data?.message || axiosError.message}`
-      );
-    }
+  accessToken: string,
+  walletId: string
+): Promise<WalletResponse> {
+  try {
+    const response = await apiClient.post<WalletResponse>(
+      "/api/wallets/default",
+      { walletId },
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    return response.data;
+  } catch (error) {
+    const axiosError = error as AxiosError<ErrorResponse>;
+    throw new Error(
+      `Failed to set default wallet: ${
+        axiosError.response?.data?.message || axiosError.message
+      }`
+    );
   }
+}
 
 // Send USDC to email or wallet
 export async function sendUsdc(
@@ -205,14 +208,13 @@ export async function withdrawUsdc(
   }
 }
 
-// Get transaction history
 export async function getTransactionHistory(
   accessToken: string,
   page: number = 1,
   limit: number = 10
-): Promise<any> {
+): Promise<HistoryResponse> {
   try {
-    const response = await apiClient.get("/api/transactions/history", {
+    const response = await apiClient.get<HistoryResponse>("/api/transactions", {
       headers: { Authorization: `Bearer ${accessToken}` },
       params: { page, limit },
     });

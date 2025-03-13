@@ -661,122 +661,114 @@ export async function handleStartWithdraw(ctx: Context): Promise<void> {
 }
 
 export async function handleTransactionHistory(ctx: Context): Promise<void> {
-  const chatId = ctx.chat?.id.toString();
-  if (!chatId) return;
+  await requireAuth(ctx, async () => {
+    const chatId = ctx.chat!.id.toString();
+    const session = sessionManager.getSession(chatId)!;
 
-  const session = sessionManager.getSession(chatId);
+    try {
+      await ctx.reply("🔄 Fetching your transaction history...");
 
-  if (!session || !sessionManager.isLoggedIn(chatId)) {
-    await ctx.reply(
-      "⚠️ You need to be logged in to view your transaction history.",
-      Markup.inlineKeyboard([
-        Markup.button.callback("🔑 Log In", "start_login"),
-      ])
-    );
-    return;
-  }
+      const history = await getTransactionHistory(session.accessToken!, 1, 10); // Last 10 transactions
 
-  try {
-    await ctx.reply("🔄 Fetching your transaction history...");
-
-    // Placeholder - replace with actual API call when available
-    // const history = await getTransactionHistory(session.accessToken!);
-
-    // Temporary mock data for demonstration
-    const history = {
-      transactions: [
-        {
-          id: "tx1",
-          type: "send",
-          amount: "50.00",
-          currency: "USDC",
-          status: "completed",
-          timestamp: "2025-03-10T10:15:30Z",
-          recipient: "user@example.com",
-        },
-        {
-          id: "tx2",
-          type: "receive",
-          amount: "100.00",
-          currency: "USDC",
-          status: "completed",
-          timestamp: "2025-03-08T14:22:15Z",
-          sender: "business@example.com",
-        },
-        {
-          id: "tx3",
-          type: "withdraw",
-          amount: "25.50",
-          currency: "USDC",
-          status: "pending",
-          timestamp: "2025-03-12T09:05:45Z",
-          destination: "0x1234...",
-        },
-      ],
-      pagination: {
-        page: 1,
-        limit: 10,
-        totalPages: 1,
-        totalItems: 3,
-      },
-    };
-
-    if (!history.transactions || history.transactions.length === 0) {
-      await ctx.reply(
-        "You don't have any transactions yet. Start by sending or receiving USDC."
-      );
-      return;
-    }
-
-    // Format the transactions
-    const transactionsMessage = history.transactions
-      .map((tx) => {
-        const date = new Date(tx.timestamp).toLocaleDateString();
-        const time = new Date(tx.timestamp).toLocaleTimeString();
-
-        let details = "";
-        if (tx.type === "send") {
-          details = `To: ${tx.recipient}`;
-        } else if (tx.type === "receive") {
-          details = `From: ${tx.sender}`;
-        } else if (tx.type === "withdraw") {
-          details = `To: ${tx.destination}`;
-        }
-
-        return (
-          `*${date} ${time}*\n` +
-          `${tx.type.toUpperCase()}: ${tx.amount} ${tx.currency}\n` +
-          `Status: ${tx.status}\n` +
-          `${details}\n`
+      if (!history.data || history.data.length === 0) {
+        await ctx.reply(
+          "No transactions found. Start by sending or receiving USDC."
         );
-      })
-      .join("\n");
+        return;
+      }
 
-    await ctx.replyWithMarkdown(
-      `*📜 Recent Transactions*\n\n${transactionsMessage}`,
-      Markup.inlineKeyboard([
-        [
-          Markup.button.callback("💵 Check Balance", "view_balance"),
-          Markup.button.callback("📤 Send USDC", "start_send"),
-        ],
-      ])
-    );
-  } catch (error) {
-    const err = error as Error;
+      const transactionsMessage = history.data
+        .map((tx) => {
+          // Simplify date format and use code block to avoid parsing issues
+          const date = new Date(tx.createdAt).toLocaleDateString("en-GB", {
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          }); // e.g., "20/11/2024 12:11:26"
+          const amount = (parseFloat(tx.fromAmount) / 1e6).toFixed(2); // Assuming 6 decimals for USDC
+          const currency = tx.fromCurrency;
 
-    if (err.message.includes("401") || err.message.includes("unauthorized")) {
-      sessionManager.deleteSession(chatId);
-      await ctx.reply(
-        "⚠️ Your session has expired. Please log in again.",
-        Markup.inlineKeyboard([
-          Markup.button.callback("🔑 Log In", "start_login"),
-        ])
-      );
-      return;
+          let details = "";
+          if (tx.type === "send") {
+            const toAddress = tx.toAccount.walletAddress
+              ? `${tx.toAccount.walletAddress.slice(
+                  0,
+                  6
+                )}...${tx.toAccount.walletAddress.slice(-4)}`
+              : "Unknown";
+            details = `To: \`${toAddress}\``;
+          } else if (tx.type === "receive") {
+            details = `From: \`${
+              tx.fromAccount.payeeDisplayName || "Unknown"
+            }\``;
+          } else if (tx.type === "withdraw") {
+            const toAddress = tx.toAccount.walletAddress
+              ? `${tx.toAccount.walletAddress.slice(
+                  0,
+                  6
+                )}...${tx.toAccount.walletAddress.slice(-4)}`
+              : "Unknown";
+            details = `To: \`${toAddress}\``;
+          } else if (tx.type === "deposit") {
+            details = `On: \`${
+              NETWORK_NAMES[tx.toAccount.network] || tx.toAccount.network
+            }\``;
+          }
+
+          const amountSign =
+            tx.type === "receive" || tx.type === "deposit" ? "+" : "-";
+          return (
+            `\`${date}\`\n` + // Use code block for date instead of bold
+            `${tx.type.toUpperCase()}: ${amountSign}${amount} ${currency}\n` +
+            `Status: ${tx.status}\n` +
+            `${details}`
+          );
+        })
+        .join("\n\n");
+
+      try {
+        await ctx.replyWithMarkdown(
+          `*📜 Recent Transactions (Last 10)*\n\n${transactionsMessage}`,
+          Markup.inlineKeyboard([
+            [
+              Markup.button.callback("💵 Check Balance", "view_balance"),
+              Markup.button.callback("📤 Send USDC", "start_send"),
+            ],
+          ])
+        );
+      } catch (markdownError) {
+        // Fallback to plain text if Markdown fails
+        await ctx.reply(
+          `📜 Recent Transactions (Last 10)\n\n${transactionsMessage.replace(
+            /`/g,
+            ""
+          )}`,
+          Markup.inlineKeyboard([
+            [
+              Markup.button.callback("💵 Check Balance", "view_balance"),
+              Markup.button.callback("📤 Send USDC", "start_send"),
+            ],
+          ])
+        );
+      }
+    } catch (error) {
+      const err = error as Error;
+      if (err.message.includes("401")) {
+        sessionManager.deleteSession(chatId);
+        await ctx.reply(
+          "⚠️ Session expired. Please log in again.",
+          Markup.inlineKeyboard([
+            Markup.button.callback("🔑 Log In", "start_login"),
+          ])
+        );
+        return;
+      }
+      await ctx.reply(`❌ Error: ${err.message}`);
     }
-
-    await ctx.reply(`❌ Error: ${err.message}`);
-  }
+  });
 }
 
 // Cancel action

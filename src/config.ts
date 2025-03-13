@@ -82,6 +82,77 @@ export interface WalletResponse {
   walletAddress: string;
 }
 
+export interface HistoryResponse {
+  page: number;
+  limit: number;
+  count: number;
+  hasMore: boolean;
+  data: Array<{
+    id: string;
+    createdAt: string;
+    updatedAt: string;
+    organizationId: string;
+    type: "send" | "receive" | "withdraw" | "deposit" | string;
+    providerCode: string;
+    kycId: string | null;
+    transferId: string;
+    status: string;
+    externalStatus: string;
+    fromAccountId: string;
+    toAccountId: string;
+    fromAmount: string;
+    fromCurrency: string;
+    toAmount: string;
+    toCurrency: string;
+    totalFee: string | null;
+    feeCurrency: string | null;
+    transactionHash: string | null;
+    externalCustomerId: string | null;
+    externalTransactionId: string | null;
+    depositUrl?: string;
+    fromAccount: {
+      id: string;
+      createdAt: string;
+      updatedAt: string;
+      type: string;
+      network: string;
+      accountId: string | null;
+      walletAddress: string | null;
+      bankName: string | null;
+      bankAddress: string | null;
+      bankRoutingNumber: string | null;
+      bankAccountNumber: string | null;
+      bankDepositMessage: string | null;
+      wireMessage: string | null;
+      country: string;
+      payeeId: string | null;
+      payeeEmail: string | null;
+      payeeOrganizationId: string | null;
+      payeeDisplayName: string | null;
+    };
+    toAccount: {
+      id: string;
+      createdAt: string;
+      updatedAt: string;
+      type: string;
+      network: string;
+      accountId: string | null;
+      walletAddress: string | null;
+      bankName: string | null;
+      bankAddress: string | null;
+      bankRoutingNumber: string | null;
+      bankAccountNumber: string | null;
+      bankDepositMessage: string | null;
+      wireMessage: string | null;
+      country: string;
+      payeeId: string | null;
+      payeeEmail: string | null;
+      payeeOrganizationId: string | null;
+      payeeDisplayName: string | null;
+    };
+  }>;
+}
+
 export interface ErrorResponse {
   message?: string;
   statusCode?: number;
