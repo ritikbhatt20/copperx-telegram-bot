@@ -18,11 +18,11 @@
     "pusher-js": "^8.4.0",
     "telegraf": "^4.16.3",
     "typescript": "^5.8.2",
+    "@types/node": "^22.13.10",
     "winston": "^3.15.0"
   },
   "devDependencies": {
     "@types/axios": "^0.9.36",
-    "@types/node": "^22.13.10",
     "nodemon": "^3.1.9",
     "ts-node": "^10.9.2"
   }
