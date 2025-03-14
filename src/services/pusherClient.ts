@@ -30,7 +30,9 @@ export class PusherClient {
   constructor(chatId: string) {
     this.chatId = chatId;
 
-    Pusher.logToConsole = true;
+    if (process.env.NODE_ENV !== "production") {
+      Pusher.logToConsole = true; // Only log in development
+    }
 
     this.pusher = new Pusher(process.env.PUSHER_APP_KEY!, {
       cluster: process.env.PUSHER_APP_CLUSTER!,
@@ -87,11 +89,11 @@ export class PusherClient {
                 );
                 // Temporary workaround: Use correct key and signature
                 authValue = `${expectedKey}:${expectedSignature}`;
-                bot.telegram.sendMessage(
-                  this.chatId,
-                  `⚠️ Pusher auth mismatch detected. Using local signature. Contact Copperx support with this info:\n` +
-                    `Socket ID: ${socketId}\nChannel: ${channel.name}\nReceived: ${response.data.auth}\nExpected: ${authValue}`
-                );
+                // bot.telegram.sendMessage(
+                //   this.chatId,
+                //   `⚠️ Pusher auth mismatch detected. Using local signature. Contact Copperx support with this info:\n` +
+                //     `Socket ID: ${socketId}\nChannel: ${channel.name}\nReceived: ${response.data.auth}\nExpected: ${authValue}`
+                // );
               }
 
               const authData: ChannelAuthorizationData = {
