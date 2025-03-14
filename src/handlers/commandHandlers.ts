@@ -21,6 +21,7 @@ import {
   withdrawToWallet,
 } from "../services/apiClient";
 import { BalanceResponse, NETWORK_NAMES } from "../config";
+import { initializePusherClient } from "../services/pusherClient";
 
 interface SendState {
   step: "address" | "amount" | "confirm";
@@ -238,11 +239,20 @@ export async function handleOtpInput(ctx: Context, otp: string): Promise<void> {
       session.sid
     );
 
+    // Fetch profile to get organizationId
+    const profile = await getProfile(accessToken);
+    const organizationId =
+      profile.organizationId || "180ad9b1-3d7b-49cc-a901-f8a9b7727800"; // Fallback from your getWallets response
+
     sessionManager.setSession(chatId, {
       accessToken,
       expireAt,
       loginState: "logged_in",
+      organizationId,
     });
+
+    // Initialize Pusher client after login
+    initializePusherClient(chatId);
 
     await ctx.replyWithMarkdown(
       `🎉 *Login successful!*\n\n` +
@@ -262,8 +272,6 @@ export async function handleOtpInput(ctx: Context, otp: string): Promise<void> {
   } catch (error) {
     const err = error as Error;
     await ctx.reply(`❌ Error: ${err.message}`);
-
-    // Give option to retry
     await ctx.reply(
       "Would you like to try again?",
       Markup.inlineKeyboard([

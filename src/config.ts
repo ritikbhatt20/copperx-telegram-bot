@@ -15,6 +15,7 @@ export interface UserSession {
   sid?: string;
   accessToken?: string;
   expireAt?: string;
+  organizationId?: string;
   otpRequestedAt?: Date;
   loginState?: "waiting_for_email" | "waiting_for_otp" | "logged_in";
   lastAction?: string;
@@ -48,6 +49,7 @@ export interface ProfileResponse {
   lastName: string | null;
   email: string;
   status: string;
+  organizationId?: string;
   [key: string]: any;
 }
 

@@ -17,6 +17,7 @@ import {
   handleStartWithdraw,
   handleDeposit,
 } from "./handlers/commandHandlers";
+import { disconnectPusherClient } from "./services/pusherClient";
 
 export const bot = new Telegraf(process.env.BOT_TOKEN || "");
 
@@ -24,7 +25,11 @@ bot.use(session());
 
 bot.start(handleStart);
 bot.command("help", handleHelp);
-bot.command("logout", handleLogout);
+bot.command("logout", (ctx) => {
+  const chatId = ctx.chat?.id.toString();
+  if (chatId) disconnectPusherClient(chatId);
+  return handleLogout(ctx);
+});
 bot.command("profile", handleProfile);
 bot.command("kyc", handleKycStatus);
 bot.command("balance", handleBalance);
@@ -43,8 +48,6 @@ bot.on("callback_query", handleCallbackQuery);
 bot.catch((err, ctx) => {
   console.error(`Error for ${ctx.updateType}:`, err);
   ctx
-    .reply(
-      "Sorry, something went wrong. Please try again or use /help to see available commands."
-    )
+    .reply("⚠️ Something went wrong. Please try again later.")
     .catch((e) => console.error("Error sending error message:", e));
 });
