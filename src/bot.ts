@@ -21,7 +21,6 @@ import {
 import { disconnectPusherClient } from "./services/pusherClient";
 require("dotenv").config();
 
-// Logger setup
 const logger = winston.createLogger({
   level: "info",
   format: winston.format.combine(
@@ -40,7 +39,12 @@ if (process.env.NODE_ENV !== "production") {
   );
 }
 
-export const bot = new Telegraf(process.env.BOT_TOKEN || "");
+if (!process.env.BOT_TOKEN) {
+  logger.error("BOT_TOKEN is not defined in environment variables");
+  throw new Error("BOT_TOKEN is not defined in environment variables");
+}
+
+export const bot = new Telegraf(process.env.BOT_TOKEN);
 
 bot.use(session());
 
@@ -72,12 +76,10 @@ bot.catch((err, ctx) => {
     .catch((e) => logger.error("Error sending error message:", e));
 });
 
-// Start the bot
 bot
   .launch()
   .then(() => logger.info("Bot started successfully"))
   .catch((err) => logger.error("Failed to start bot:", err));
 
-// Handle graceful shutdown
 process.once("SIGINT", () => bot.stop("SIGINT"));
 process.once("SIGTERM", () => bot.stop("SIGTERM"));

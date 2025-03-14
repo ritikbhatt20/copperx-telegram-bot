@@ -2,12 +2,13 @@
   "name": "copperx-telegram-bot",
   "version": "1.0.0",
   "description": "Telegram bot for Copperx Payouts",
-  "main": "dist/index.js",
+  "main": "dist/bot.js",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/index.js",
-    "dev": "ts-node index.ts",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node dist/bot.js",
+    "dev": "ts-node bot.ts",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "postinstall": "npm run build"
   },
   "keywords": [],
   "author": "",
@@ -27,6 +28,6 @@
     "dotenv": "^16.4.7",
     "pusher-js": "^8.4.0",
     "telegraf": "^4.16.3",
-    "winston": "^3.17.0"
+    "winston": "^3.15.0"
   }
 }
