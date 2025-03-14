@@ -1,3 +1,4 @@
+// handlers/callbackHandlers.ts
 import { Context } from "telegraf";
 import { sessionManager } from "../services/sessionManager";
 
@@ -28,6 +29,8 @@ export async function handleCallbackQuery(ctx: Context): Promise<void> {
     handleStartWithdraw,
     handleWithdrawSelectBank,
     handleWithdrawConfirmation,
+    handleDeposit,
+    handleDepositNetworkSelection,
   } = await import("./commandHandlers");
 
   console.log("Callback data received:", data);
@@ -43,6 +46,13 @@ export async function handleCallbackQuery(ctx: Context): Promise<void> {
   if (data === "start_addpayee") return handleStartAddPayee(ctx);
   if (data === "start_sendemail") return handleStartSendEmail(ctx);
   if (data === "start_withdraw") return handleStartWithdraw(ctx);
+  if (data === "deposit") return handleDeposit(ctx);
+
+  // Handle deposit network selection
+  if (data.startsWith("deposit_network_")) {
+    const network = data.replace("deposit_network_", "");
+    return handleDepositNetworkSelection(ctx, network);
+  }
 
   if (data.startsWith("sendemail_to_")) {
     const email = data.replace("sendemail_to_", "");
@@ -80,7 +90,7 @@ export async function handleCallbackQuery(ctx: Context): Promise<void> {
   }
 
   if (data === "confirm_withdraw") {
-    return handleWithdrawConfirmation(ctx); // Updated to use session data
+    return handleWithdrawConfirmation(ctx);
   }
 
   await ctx.reply("Unknown action. Use /help for commands.");

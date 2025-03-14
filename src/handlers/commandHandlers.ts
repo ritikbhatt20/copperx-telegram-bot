@@ -20,8 +20,7 @@ import {
   getTransactionHistory,
   withdrawToWallet,
 } from "../services/apiClient";
-import { BalanceResponse } from "../config";
-import { CONFIG, NETWORK_NAMES } from "../config";
+import { BalanceResponse, NETWORK_NAMES } from "../config";
 
 interface SendState {
   step: "address" | "amount" | "confirm";
@@ -95,10 +94,11 @@ export async function handleHelp(ctx: Context): Promise<void> {
     "• 🔒 /kyc - Check KYC status\n" +
     "• 🏦 /setdefault - Set your default wallet\n\n" +
     "*Transactions:*\n" +
+    "• 💰 /deposit - Deposit USDC to your account\n" + // Add this line
     "• 💵 /balance - Check wallet balances\n" +
     "• 📤 /send - Send USDC to a wallet\n" +
     "• 📧 /sendemail - Send USDC via email\n" +
-    "• 🏦 /withdraw - Withdraw USDC to your bank account\n" + // Updated
+    "• 🏦 /withdraw - Withdraw USDC to your bank account\n" +
     "• 📜 /history - View recent transactions\n" +
     "• ➕ /addpayee - Add a new payee\n\n" +
     "*Support:* https://t.me/copperxcommunity/2183";
@@ -110,6 +110,7 @@ export async function handleHelp(ctx: Context): Promise<void> {
           Markup.button.callback("💵 Balance", "view_balance"),
         ],
         [
+          Markup.button.callback("💰 Deposit", "deposit"), // Add this button
           Markup.button.callback("📤 Send USDC", "start_send"),
           Markup.button.callback("📧 Send via Email", "start_sendemail"),
         ],
@@ -439,6 +440,124 @@ export async function handleKycStatus(ctx: Context): Promise<void> {
 
     await ctx.reply(`❌ Error: ${err.message}`);
   }
+}
+
+export async function handleDepositNetworkSelection(
+  ctx: Context,
+  network: string
+): Promise<void> {
+  const chatId = ctx.chat?.id.toString();
+  if (!chatId) return;
+
+  const session = sessionManager.getSession(chatId);
+  if (!session || !session.accessToken) {
+    await ctx.reply(
+      "⚠️ You need to be logged in to view deposit addresses.",
+      Markup.inlineKeyboard([
+        Markup.button.callback("🔑 Log In", "start_login"),
+      ])
+    );
+    return;
+  }
+
+  try {
+    await ctx.reply("🔄 Fetching your wallet address...");
+
+    // Fetch wallets and find the one matching the selected network
+    const wallets = await getWallets(session.accessToken!);
+    const selectedWallet = wallets.find((w) => w.network === network);
+
+    if (!selectedWallet) {
+      await ctx.reply(
+        `⚠️ No wallet found for ${NETWORK_NAMES[network] || network}.`
+      );
+      return;
+    }
+
+    const networkName =
+      NETWORK_NAMES[selectedWallet.network] || selectedWallet.network;
+    const walletAddress = selectedWallet.walletAddress;
+
+    // Mimic Copperx app's warning message
+    const warningMessage = `*Only send USDC to this address on the ${networkName} network.* Sending the wrong token or using the wrong network will cause loss of funds.`;
+
+    await ctx.replyWithMarkdown(
+      `*💰 Deposit USDC on ${networkName}*\n\n` +
+        `Address: \`${walletAddress}\`\n\n` +
+        `${warningMessage}`,
+      Markup.inlineKeyboard([
+        [Markup.button.callback("💵 Check Balance", "view_balance")],
+        [Markup.button.callback("🔙 Back to Networks", "deposit")],
+      ])
+    );
+  } catch (error) {
+    const err = error as Error;
+    if (err.message.includes("401")) {
+      sessionManager.deleteSession(chatId);
+      await ctx.reply(
+        "⚠️ Session expired. Please log in again.",
+        Markup.inlineKeyboard([
+          Markup.button.callback("🔑 Log In", "start_login"),
+        ])
+      );
+      return;
+    }
+    await ctx.reply(`❌ Error: ${err.message}`);
+  }
+}
+
+export async function handleDeposit(ctx: Context): Promise<void> {
+  await requireAuth(ctx, async () => {
+    const chatId = ctx.chat!.id.toString();
+    const session = sessionManager.getSession(chatId)!;
+
+    try {
+      await ctx.reply("🔄 Fetching your deposit options...");
+
+      // Fetch wallets from Copperx API
+      const wallets = await getWallets(session.accessToken!);
+
+      if (!wallets || wallets.length === 0) {
+        await ctx.reply(
+          "⚠️ No wallets found. Please contact support to set up your account."
+        );
+        return;
+      }
+
+      // Create inline keyboard buttons for each supported network
+      const networkButtons = wallets.map((wallet) => {
+        const networkName = NETWORK_NAMES[wallet.network] || wallet.network;
+        const isDefault = wallet.isDefault ? " (Default)" : "";
+        return [
+          Markup.button.callback(
+            `${networkName}${isDefault}`,
+            `deposit_network_${wallet.network}`
+          ),
+        ];
+      });
+
+      await ctx.replyWithMarkdown(
+        `*💰 Deposit USDC*\n\nSelect a network to view your deposit address:`,
+        Markup.inlineKeyboard([
+          ...networkButtons,
+          [Markup.button.callback("❌ Cancel", "cancel_action")],
+        ])
+      );
+    } catch (error) {
+      const err = error as Error;
+      if (err.message.includes("401")) {
+        sessionManager.deleteSession(chatId);
+        await ctx.reply(
+          "⚠️ Session expired. Please log in again.",
+          Markup.inlineKeyboard([
+            Markup.button.callback("🔑 Log In", "start_login"),
+          ])
+        );
+        return;
+      }
+      await ctx.reply(`❌ Error: ${err.message}`);
+    }
+  });
 }
 
 export async function handleBalance(ctx: Context): Promise<void> {
@@ -1061,9 +1180,7 @@ export async function handleWithdrawAmount(
     const usdcBalance = parseInt(balance.balance); // No division by decimals
     if (amount > usdcBalance) {
       await ctx.reply(
-        `❌ Insufficient balance. You have ${usdcBalance.toFixed(
-          2
-        )} USDC.`
+        `❌ Insufficient balance. You have ${usdcBalance.toFixed(2)} USDC.`
       );
       return;
     }
