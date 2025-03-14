@@ -19,7 +19,11 @@ import {
   handleDeposit,
 } from "./handlers/commandHandlers";
 import { disconnectPusherClient } from "./services/pusherClient";
-require("dotenv").config();
+
+// Load .env only in development
+if (process.env.NODE_ENV !== "production") {
+  require("dotenv").config();
+}
 
 const logger = winston.createLogger({
   level: "info",
@@ -38,6 +42,12 @@ if (process.env.NODE_ENV !== "production") {
     new winston.transports.Console({ format: winston.format.simple() })
   );
 }
+
+// Debug environment variables
+logger.info("Environment variables:", {
+  BOT_TOKEN: process.env.BOT_TOKEN,
+  NODE_ENV: process.env.NODE_ENV,
+});
 
 if (!process.env.BOT_TOKEN) {
   logger.error("BOT_TOKEN is not defined in environment variables");
