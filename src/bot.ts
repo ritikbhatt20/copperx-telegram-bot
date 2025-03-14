@@ -20,7 +20,7 @@ import {
 } from "./handlers/commandHandlers";
 import { disconnectPusherClient } from "./services/pusherClient";
 
-// Load .env only in development
+// Load dotenv only in development
 if (process.env.NODE_ENV !== "production") {
   require("dotenv").config();
 }
@@ -43,11 +43,11 @@ if (process.env.NODE_ENV !== "production") {
   );
 }
 
-// Debug environment variables
-logger.info("Environment variables:", {
-  BOT_TOKEN: process.env.BOT_TOKEN,
-  NODE_ENV: process.env.NODE_ENV,
-});
+// Log all environment variables for debugging
+logger.info("All environment variables:", process.env);
+
+// Check BOT_TOKEN specifically
+logger.info("BOT_TOKEN value:", process.env.BOT_TOKEN);
 
 if (!process.env.BOT_TOKEN) {
   logger.error("BOT_TOKEN is not defined in environment variables");
