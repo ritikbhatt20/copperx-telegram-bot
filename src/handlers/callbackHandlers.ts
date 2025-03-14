@@ -1,4 +1,3 @@
-// handlers/callbackHandlers.ts
 import { Context } from "telegraf";
 import { sessionManager } from "../services/sessionManager";
 
@@ -32,6 +31,7 @@ export async function handleCallbackQuery(ctx: Context): Promise<void> {
     handleDeposit,
     handleSetDefaultWallet,
     handleSetDefaultWalletSelection,
+    handleHelp,
   } = await import("./commandHandlers");
 
   console.log("Callback data received:", data);
@@ -50,8 +50,8 @@ export async function handleCallbackQuery(ctx: Context): Promise<void> {
   if (data === "start_withdraw") return handleStartWithdraw(ctx);
   if (data === "deposit") return handleDeposit(ctx);
   if (data === "set_default_wallet") return handleSetDefaultWallet(ctx);
+  if (data === "show_help") return handleHelp(ctx);
 
-  // Handle set default wallet selection
   if (data.startsWith("set_default_wallet_")) {
     const walletId = data.replace("set_default_wallet_", "");
     return handleSetDefaultWalletSelection(ctx, walletId);
