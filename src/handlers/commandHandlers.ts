@@ -795,7 +795,12 @@ export async function handleSetDefaultWallet(ctx: Context): Promise<void> {
         );
         return;
       }
-      await ctx.reply(`❌ Error: ${err.message}`);
+      await ctx.reply(
+        `❌ Error: ${err.message}`,
+        Markup.inlineKeyboard([
+          Markup.button.callback("<< Back to Menu", "back_to_menu"),
+        ])
+      );
     }
   });
 }
@@ -845,7 +850,12 @@ export async function handleSetDefaultWalletSelection(
       );
       return;
     }
-    await ctx.reply(`❌ Error: ${err.message}`);
+    await ctx.reply(
+      `❌ Error: ${err.message}`,
+      Markup.inlineKeyboard([
+        Markup.button.callback("<< Back to Menu", "back_to_menu"),
+      ])
+    );
   }
 }
 
@@ -877,7 +887,12 @@ export async function handleSendMoneyMenu(ctx: Context): Promise<void> {
         );
         return;
       }
-      await ctx.reply(`❌ Error: ${err.message}`);
+      await ctx.reply(
+        `❌ Error: ${err.message}`,
+        Markup.inlineKeyboard([
+          Markup.button.callback("<< Back to Menu", "back_to_menu"),
+        ])
+      );
     }
   });
 }
@@ -1012,7 +1027,12 @@ export async function handleSendConfirmation(
       );
       return;
     }
-    await ctx.reply(`❌ Error: ${err.message}`);
+    await ctx.reply(
+      `❌ Error: ${err.message}`,
+      Markup.inlineKeyboard([
+        Markup.button.callback("<< Back to Menu", "back_to_menu"),
+      ])
+    );
   }
 }
 
@@ -1121,7 +1141,12 @@ export async function handlePayeeNickname(
       );
       return;
     }
-    await ctx.reply(`❌ Error: ${err.message}`);
+    await ctx.reply(
+      `❌ Error: ${err.message}`,
+      Markup.inlineKeyboard([
+        Markup.button.callback("<< Back to Menu", "back_to_menu"),
+      ])
+    );
   }
 }
 
@@ -1170,7 +1195,12 @@ export async function handleStartSendEmail(ctx: Context): Promise<void> {
       const err = error as Error;
       session.lastAction = undefined;
       sessionManager.setSession(chatId, session);
-      await ctx.reply(`❌ Error: ${err.message}`);
+      await ctx.reply(
+        `❌ Error: ${err.message}`,
+        Markup.inlineKeyboard([
+          Markup.button.callback("<< Back to Menu", "back_to_menu"),
+        ])
+      );
     }
   });
 }
@@ -1281,7 +1311,12 @@ export async function handleSendEmailConfirmation(
       );
       return;
     }
-    await ctx.reply(`❌ Error: ${err.message}`);
+    await ctx.reply(
+      `❌ Error: ${err.message}`,
+      Markup.inlineKeyboard([
+        Markup.button.callback("<< Back to Menu", "back_to_menu"),
+      ])
+    );
   }
 }
 
@@ -1308,7 +1343,12 @@ export async function handleStartWithdraw(ctx: Context): Promise<void> {
       );
     } catch (error) {
       const err = error as Error;
-      await ctx.reply(`❌ Error: ${err.message}`);
+      await ctx.reply(
+        `❌ Error: ${err.message}`,
+        Markup.inlineKeyboard([
+          Markup.button.callback("<< Back to Menu", "back_to_menu"),
+        ])
+      );
     }
   });
 }
@@ -1333,7 +1373,10 @@ export async function handleWithdrawAmount(
     const usdcBalance = parseInt(balance.balance); // No division by decimals
     if (amount > usdcBalance) {
       await ctx.reply(
-        `❌ Insufficient balance. You have ${usdcBalance.toFixed(2)} USDC.`
+        `❌ Insufficient balance. You have ${usdcBalance.toFixed(2)} USDC.`,
+        Markup.inlineKeyboard([
+          Markup.button.callback("<< Back to Menu", "back_to_menu"),
+        ])
       );
       return;
     }
@@ -1376,7 +1419,12 @@ export async function handleWithdrawAmount(
     const err = error as Error;
     session.lastAction = undefined;
     sessionManager.setSession(chatId, session);
-    await ctx.reply(`❌ Error: ${err.message}`);
+    await ctx.reply(
+      `❌ Error: ${err.message}`,
+      Markup.inlineKeyboard([
+        Markup.button.callback("<< Back to Menu", "back_to_menu"),
+      ])
+    );
   }
 }
 
@@ -1456,7 +1504,12 @@ export async function handleWithdrawSelectBank(
     const err = error as Error;
     session.lastAction = undefined;
     sessionManager.setSession(chatId, session);
-    await ctx.reply(`❌ Error: ${err.message}`);
+    await ctx.reply(
+      `❌ Error: ${err.message}`,
+      Markup.inlineKeyboard([
+        Markup.button.callback("<< Back to Menu", "back_to_menu"),
+      ])
+    );
   }
 }
 
@@ -1535,7 +1588,12 @@ export async function handleWithdrawConfirmation(ctx: Context): Promise<void> {
       );
       return;
     }
-    await ctx.reply(`❌ Error: ${err.message}`);
+    await ctx.reply(
+      `❌ Error: ${err.message}`,
+      Markup.inlineKeyboard([
+        Markup.button.callback("<< Back to Menu", "back_to_menu"),
+      ])
+    );
   }
 }
 
@@ -1699,7 +1757,12 @@ export async function handleTransactionHistory(ctx: Context): Promise<void> {
         );
         return;
       }
-      await ctx.reply(`❌ Error: ${err.message}`);
+      await ctx.reply(
+        `❌ Error: ${err.message}`,
+        Markup.inlineKeyboard([
+          Markup.button.callback("<< Back to Menu", "back_to_menu"),
+        ])
+      );
     }
   });
 }
