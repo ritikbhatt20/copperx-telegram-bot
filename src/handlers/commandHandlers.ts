@@ -58,37 +58,53 @@ export async function handleStart(ctx: Context): Promise<void> {
   const chatId = ctx.chat?.id.toString();
   if (!chatId) return;
 
-  // Create initial session if doesn't exist
+  // Create initial session if it doesn't exist
   if (!sessionManager.getSession(chatId)) {
     sessionManager.setSession(chatId, { chatId });
   }
 
-  await ctx.reply(
-    "🚀 Welcome to CopperX Bot!\n\n" +
-      "I'm here to help you manage your CopperX account. Choose an option below:",
-    Markup.inlineKeyboard([
-      [
-        Markup.button.callback("👤 Profile", "view_profile"),
-        Markup.button.callback("📋 KYC Status", "view_kyc"),
-      ],
-      [
-        Markup.button.callback("🎒 Wallets", "view_wallets"),
-        Markup.button.callback("💰 Balance", "view_balance"),
-      ],
-      [
-        Markup.button.callback("📤 Send Money", "send_money_menu"),
-        Markup.button.callback("📥 Deposit", "deposit"),
-      ],
-      [
-        Markup.button.callback("⚙️ Set Default Wallet", "set_default_wallet"),
-        Markup.button.callback("➕ Add Payee", "start_addpayee"),
-      ],
-      [
-        Markup.button.callback("📜 Transactions", "view_history"),
-        Markup.button.callback("🔒 Logout", "logout"),
-      ],
-    ])
-  );
+  // Check if the user is logged in
+  const isLoggedIn = sessionManager.isLoggedIn(chatId);
+
+  if (!isLoggedIn) {
+    // User is not logged in, show login prompt
+    await ctx.reply(
+      "🚀 Welcome to CopperX Bot!\n\n" +
+        "⚠️ You need to be logged in first to use this bot.\n\n" +
+        "Press the button below to log in:",
+      Markup.inlineKeyboard([
+        [Markup.button.callback("🔑 Log In", "start_login")],
+      ])
+    );
+  } else {
+    // User is logged in, show the main menu
+    await ctx.reply(
+      "🚀 Welcome to CopperX Bot!\n\n" +
+        "I'm here to help you manage your CopperX account. Choose an option below:",
+      Markup.inlineKeyboard([
+        [
+          Markup.button.callback("👤 Profile", "view_profile"),
+          Markup.button.callback("📋 KYC Status", "view_kyc"),
+        ],
+        [
+          Markup.button.callback("🎒 Wallets", "view_wallets"),
+          Markup.button.callback("💰 Balance", "view_balance"),
+        ],
+        [
+          Markup.button.callback("📤 Send Money", "send_money_menu"),
+          Markup.button.callback("📥 Deposit", "deposit"),
+        ],
+        [
+          Markup.button.callback("⚙️ Set Default Wallet", "set_default_wallet"),
+          Markup.button.callback("➕ Add Payee", "start_addpayee"),
+        ],
+        [
+          Markup.button.callback("📜 Transactions", "view_history"),
+          Markup.button.callback("🔒 Logout", "logout"),
+        ],
+      ])
+    );
+  }
 }
 
 // Help command
@@ -125,9 +141,8 @@ export async function handleHelp(ctx: Context): Promise<void> {
           Markup.button.callback("💵 Balance", "view_balance"),
         ],
         [
-          Markup.button.callback("💰 Deposit", "deposit"), // Add this button
-          Markup.button.callback("💼 Send to Wallet", "start_send"),
-          Markup.button.callback("📧 Send via Email", "start_sendemail"),
+          Markup.button.callback("📥 Deposit", "deposit"),
+          Markup.button.callback("💸 Send Money", "send_money_menu"),
         ],
         [
           Markup.button.callback("🏦 Withdraw to Bank", "start_withdraw"),
@@ -268,18 +283,29 @@ export async function handleOtpInput(ctx: Context, otp: string): Promise<void> {
     // Initialize Pusher client after login
     initializePusherClient(chatId);
 
-    await ctx.replyWithMarkdown(
-      `🎉 *Login successful!*\n\n` +
-        `Welcome back, ${user.email}.\n\n` +
-        "What would you like to do next?",
+    // Then show the main menu (copied from handleStart)
+    await ctx.replyWithHTML(
+      `🎉 <b>Login successful!</b>\n\n🚀 Welcome to CopperX Bot, ${user.email}!\n\nI'm here to help you manage your CopperX account. Choose an option below:`,
       Markup.inlineKeyboard([
         [
-          Markup.button.callback("👤 View Profile", "view_profile"),
-          Markup.button.callback("💵 Check Balance", "view_balance"),
+          Markup.button.callback("👤 Profile", "view_profile"),
+          Markup.button.callback("📋 KYC Status", "view_kyc"),
         ],
         [
-          Markup.button.callback("📤 Send USDC", "send_money_menu"),
-          Markup.button.callback("🏦 Withdraw", "start_withdraw"),
+          Markup.button.callback("🎒 Wallets", "view_wallets"),
+          Markup.button.callback("💰 Balance", "view_balance"),
+        ],
+        [
+          Markup.button.callback("📤 Send Money", "send_money_menu"),
+          Markup.button.callback("📥 Deposit", "deposit"),
+        ],
+        [
+          Markup.button.callback("⚙️ Set Default Wallet", "set_default_wallet"),
+          Markup.button.callback("➕ Add Payee", "start_addpayee"),
+        ],
+        [
+          Markup.button.callback("📜 Transactions", "view_history"),
+          Markup.button.callback("🔒 Logout", "logout"),
         ],
       ])
     );
@@ -969,6 +995,7 @@ export async function handleSendConfirmation(
       Markup.inlineKeyboard([
         [Markup.button.callback("💵 Check Balance", "view_balance")],
         [Markup.button.callback("📜 History", "view_history")],
+        [Markup.button.callback("<< Back to Menu", "back_to_menu")],
       ])
     );
   } catch (error) {
@@ -998,7 +1025,12 @@ export async function handleCancelAction(ctx: Context): Promise<void> {
     session.lastAction = undefined;
     sessionManager.setSession(chatId, session);
   }
-  await ctx.reply("Action cancelled.", Markup.removeKeyboard());
+
+  // Show cancellation message
+  await ctx.reply("Action cancelled.");
+
+  // Call handleStart to return to the main menu
+  await handleStart(ctx);
 }
 
 export async function handleStartAddPayee(ctx: Context): Promise<void> {
@@ -1232,6 +1264,7 @@ export async function handleSendEmailConfirmation(
       Markup.inlineKeyboard([
         [Markup.button.callback("💵 Check Balance", "view_balance")],
         [Markup.button.callback("📜 History", "view_history")],
+        [Markup.button.callback("<< Back to Menu", "back_to_menu")],
       ])
     );
   } catch (error) {
@@ -1484,6 +1517,7 @@ export async function handleWithdrawConfirmation(ctx: Context): Promise<void> {
       Markup.inlineKeyboard([
         [Markup.button.callback("💵 Check Balance", "view_balance")],
         [Markup.button.callback("📜 History", "view_history")],
+        [Markup.button.callback("<< Back to Menu", "back_to_menu")],
       ])
     );
   } catch (error) {
