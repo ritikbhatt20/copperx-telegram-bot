@@ -594,7 +594,7 @@ export async function handleDepositNetworkSelection(
         `• Only send supported tokens\n` +
         `• Double-check the network before sending\n` +
         `• Minimum deposit amount may apply\n\n` +
-        `Use /transactions to check your deposit status.`,
+        `Use /history to check your recent Transaction History.`,
       Markup.inlineKeyboard([
         [Markup.button.callback("<< Back to Menu", "back_to_menu")],
       ])
