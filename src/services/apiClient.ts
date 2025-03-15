@@ -292,21 +292,30 @@ export async function sendToUser(
   }
 }
 
-export async function getWalletBalance(accessToken: string): Promise<WalletBalanceResponse> {
+export async function getWalletBalance(
+  accessToken: string
+): Promise<WalletBalanceResponse> {
   try {
-    const response = await apiClient.get<WalletBalanceResponse>("/api/wallets/balance", {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
+    const response = await apiClient.get<WalletBalanceResponse>(
+      "/api/wallets/balance",
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }
+    );
     return response.data;
   } catch (error) {
     const axiosError = error as AxiosError<ErrorResponse>;
     throw new Error(
-      `Failed to fetch wallet balance: ${axiosError.response?.data?.message || axiosError.message}`
+      `Failed to fetch wallet balance: ${
+        axiosError.response?.data?.message || axiosError.message
+      }`
     );
   }
 }
 
-export async function getAccounts(accessToken: string): Promise<AccountListResponse> {
+export async function getAccounts(
+  accessToken: string
+): Promise<AccountListResponse> {
   try {
     const response = await apiClient.get<AccountListResponse>("/api/accounts", {
       headers: { Authorization: `Bearer ${accessToken}` },
@@ -315,7 +324,9 @@ export async function getAccounts(accessToken: string): Promise<AccountListRespo
   } catch (error) {
     const axiosError = error as AxiosError<ErrorResponse>;
     throw new Error(
-      `Failed to fetch accounts: ${axiosError.response?.data?.message || axiosError.message}`
+      `Failed to fetch accounts: ${
+        axiosError.response?.data?.message || axiosError.message
+      }`
     );
   }
 }
@@ -378,37 +389,13 @@ export async function createOfframpTransfer(
   }
 }
 
-// Withdraw USDC
-export async function withdrawUsdc(
-  accessToken: string,
-  destination: string,
-  amount: number,
-  network: string = "solana"
-): Promise<any> {
-  try {
-    const response = await apiClient.post(
-      "/api/transactions/withdraw",
-      { destination, amount, currency: "USDC", network },
-      { headers: { Authorization: `Bearer ${accessToken}` } }
-    );
-    return response.data;
-  } catch (error) {
-    const axiosError = error as AxiosError<ErrorResponse>;
-    throw new Error(
-      `Failed to withdraw USDC: ${
-        axiosError.response?.data?.message || axiosError.message
-      }`
-    );
-  }
-}
-
 export async function getTransactionHistory(
   accessToken: string,
   page: number = 1,
   limit: number = 10
 ): Promise<HistoryResponse> {
   try {
-    const response = await apiClient.get<HistoryResponse>("/api/transactions", {
+    const response = await apiClient.get<HistoryResponse>("/api/transfers", {
       headers: { Authorization: `Bearer ${accessToken}` },
       params: { page, limit },
     });

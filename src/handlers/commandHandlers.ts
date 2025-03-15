@@ -16,7 +16,6 @@ import {
   getAccounts,
   getOfframpQuote,
   createOfframpTransfer,
-  withdrawUsdc,
   getTransactionHistory,
   withdrawToWallet,
 } from "../services/apiClient";
@@ -1561,80 +1560,83 @@ export async function handleTransactionHistory(ctx: Context): Promise<void> {
         return;
       }
 
-      // Format transactions with better visual hierarchy
+      // Format transactions to match the specified style
       const transactionsMessage = history.data
         .map((tx) => {
-          // Format date in a cleaner way
+          // Use the first transaction in the transactions array for status and amounts
+          const transaction = tx.transactions[0] || {};
           const txDate = new Date(tx.createdAt);
-          const dateStr = txDate.toLocaleDateString("en-GB", {
+          const dateStr = txDate.toLocaleDateString("en-US", {
+            month: "long",
             day: "2-digit",
-            month: "2-digit",
             year: "numeric",
           });
-          const timeStr = txDate.toLocaleTimeString("en-GB", {
+          const timeStr = txDate.toLocaleTimeString("en-US", {
             hour: "2-digit",
             minute: "2-digit",
+            hour12: true,
           });
 
-          // Correct the amount by dividing by 1e8 instead of 1e8 (removing 2 extra zeros)
-          const amount = (parseFloat(tx.fromAmount) / 1e8).toFixed(2);
-          const currency = tx.fromCurrency;
+          // Format the amount (divide by 1e8 for USDC scaling)
+          const amount = (
+            parseFloat(transaction.fromAmount || tx.amount) / 1e8
+          ).toFixed(2);
+          const currency = transaction.fromCurrency || tx.currency;
 
-          // Emoji based on transaction type
+          // Determine transaction type and emoji
+          let txType = tx.type.toUpperCase();
           let txEmoji = "";
-          let details = "";
           let amountSign = "";
 
-          switch (tx.type) {
+          switch (tx.type.toLowerCase()) {
             case "send":
-              txEmoji = "↗️";
+              txEmoji = "➤";
               amountSign = "-";
-              const toAddress = tx.toAccount.walletAddress
-                ? `${tx.toAccount.walletAddress.slice(
-                    0,
-                    6
-                  )}...${tx.toAccount.walletAddress.slice(-4)}`
-                : "Unknown";
-              details = `To: \`${toAddress}\``;
-              break;
-            case "receive":
-              txEmoji = "↘️";
-              amountSign = "+";
-              details = `From: \`${
-                tx.fromAccount.payeeDisplayName || "Unknown"
-              }\``;
+              txType = "SEND";
               break;
             case "withdraw":
-              txEmoji = "🏧";
+              txEmoji = "📤";
               amountSign = "-";
-              const withdrawAddress = tx.toAccount.walletAddress
-                ? `${tx.toAccount.walletAddress.slice(
-                    0,
-                    6
-                  )}...${tx.toAccount.walletAddress.slice(-4)}`
-                : "Unknown";
-              details = `To: \`${withdrawAddress}\``;
+              txType = tx.mode === "off_ramp" ? "OFF-RAMP" : "WITHDRAW";
               break;
             case "deposit":
-              txEmoji = "💰";
+              txEmoji = "📥";
               amountSign = "+";
-              details = `Network: \`${
-                NETWORK_NAMES[tx.toAccount.network] || tx.toAccount.network
-              }\``;
+              txType = "DEPOSIT";
               break;
+            case "receive":
+              txEmoji = "📥";
+              amountSign = "+";
+              txType = "RECEIVE";
+              break;
+            default:
+              txEmoji = "📤"; // Fallback for unknown types
           }
 
-          // Status emoji
+          // Determine recipient details
+          let recipientDetails = "";
+          if (tx.mode === "off_ramp" && tx.destinationAccount.bankName) {
+            recipientDetails = `To: ${tx.destinationAccount.bankName}`;
+          } else {
+            const toAddress = tx.destinationAccount.walletAddress
+              ? `${tx.destinationAccount.walletAddress.slice(
+                  0,
+                  6
+                )}...${tx.destinationAccount.walletAddress.slice(-5)}`
+              : tx.destinationAccount.payeeEmail || "Unknown";
+            recipientDetails = `To: <code><a href="https://example.com/address/${toAddress}">${toAddress}</a></code>`;
+          }
+
+          // Determine status emoji and text
           let statusEmoji = "";
-          switch (tx.status.toLowerCase()) {
+          let statusText = transaction.status || tx.status || "unknown";
+          switch (statusText.toLowerCase()) {
             case "success":
               statusEmoji = "✅";
               break;
+            case "processing":
             case "pending":
-              statusEmoji = "⏳";
-              break;
-            case "awaiting_funds":
-              statusEmoji = "⏳";
+              statusEmoji = "⌛";
               break;
             case "canceled":
               statusEmoji = "❌";
@@ -1644,18 +1646,19 @@ export async function handleTransactionHistory(ctx: Context): Promise<void> {
           }
 
           return (
-            `${txEmoji} *${tx.type.toUpperCase()}* • \`${dateStr} ${timeStr}\`\n` +
-            `*${amountSign}${amount} ${currency}* ${statusEmoji} ${tx.status}\n` +
-            `${details}`
+            `${txEmoji} <b>${txType}</b>\n` +
+            `Amount: ${amountSign}${amount} ${currency}\n` +
+            `${recipientDetails}\n` +
+            `Status: ${statusEmoji}\n` +
+            `Date: ${dateStr} at ${timeStr}`
           );
         })
         .join("\n\n");
 
-      const formattedMessage = `*📜 Recent Transactions*\n\n${transactionsMessage}`;
+      const formattedMessage = `<b>📜 Recent Transactions</b>\n\n${transactionsMessage}`;
 
       try {
-        // Updated button configuration to include a Refresh button
-        await ctx.replyWithMarkdown(
+        await ctx.replyWithHTML(
           formattedMessage,
           Markup.inlineKeyboard([
             [
@@ -1680,6 +1683,7 @@ export async function handleTransactionHistory(ctx: Context): Promise<void> {
               Markup.button.callback("📤 Send USDC", "send_money_menu"),
               Markup.button.callback("🔄 Refresh", "view_history"),
             ],
+            [Markup.button.callback("<< Back to Menu", "back_to_menu")],
           ])
         );
       }
