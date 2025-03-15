@@ -80,6 +80,10 @@ export async function handleStart(ctx: Context): Promise<void> {
         Markup.button.callback("📥 Deposit", "deposit"),
       ],
       [
+        Markup.button.callback("⚙️ Set Default Wallet", "set_default_wallet"),
+        Markup.button.callback("➕ Add Payee", "start_addpayee"),
+      ],
+      [
         Markup.button.callback("📜 Transactions", "view_history"),
         Markup.button.callback("🔒 Logout", "logout"),
       ],
@@ -122,7 +126,7 @@ export async function handleHelp(ctx: Context): Promise<void> {
         ],
         [
           Markup.button.callback("💰 Deposit", "deposit"), // Add this button
-          Markup.button.callback("📤 Send USDC", "start_send"),
+          Markup.button.callback("💼 Send to Wallet", "start_send"),
           Markup.button.callback("📧 Send via Email", "start_sendemail"),
         ],
         [
@@ -274,7 +278,7 @@ export async function handleOtpInput(ctx: Context, otp: string): Promise<void> {
           Markup.button.callback("💵 Check Balance", "view_balance"),
         ],
         [
-          Markup.button.callback("📤 Send USDC", "start_send"),
+          Markup.button.callback("📤 Send USDC", "send_money_menu"),
           Markup.button.callback("🏦 Withdraw", "start_withdraw"),
         ],
       ])
@@ -342,13 +346,15 @@ export async function handleProfile(ctx: Context): Promise<void> {
       [profile.firstName, profile.lastName].filter(Boolean).join(" ") ||
       "Not set";
 
-    await ctx.reply(
-      `YOUR CopperX Profile\n\n` +
-        `PERSONAL DETAILS\n` +
-        `EMAIL: ${profile.email}\n` +
-        `ID: ${profile.id}\n` +
-        `USER NAME: ${name}\n\n` +
-        `ACCOUNT STATUS: ${profile.status}\n\n` +
+    const statusEmoji = profile.status === "active" ? "🟢" : "🔴";
+
+    await ctx.replyWithHTML(
+      `👤 <b>Your CopperX Profile</b>\n\n` +
+        `<b>Personal Details</b>\n` +
+        `📧 Email: ${profile.email}\n` +
+        `🆔 User ID: <code><a href="https://example.com/address/${profile.id}">${profile.id}</a></code>\n` +
+        `👤 Name: ${name}\n\n` +
+        `📑 <b>KYC Status</b>: ${statusEmoji} ${profile.status}\n\n` +
         `Use /kyc to check detailed KYC status\n` +
         `Use /wallets to manage your wallets`,
       Markup.inlineKeyboard([
@@ -388,19 +394,21 @@ export async function handleWallets(ctx: Context): Promise<void> {
       const wallets = await getWallets(session.accessToken!);
       if (!wallets || wallets.length === 0) {
         await ctx.reply(
-          "No wallets found. Contact support to set up your account."
+          "⚠️ No wallets found. Contact support to set up your account."
         );
         return;
       }
 
       const walletMessages = wallets.map((wallet) => {
         const networkName = NETWORK_NAMES[wallet.network] || wallet.network;
-        const isDefault = wallet.isDefault ? "✅ DEFAULT WALLET: " : "WALLET: ";
-        return `${isDefault}${networkName}\nADDRESS: ${wallet.walletAddress}`;
+        const isDefault = wallet.isDefault
+          ? "✅ <b>Default Wallet</b> "
+          : "👛 <b>Wallet</b> ";
+        return `${isDefault}<i>(${networkName})</i>\n<code><a href="https://example.com/address/${wallet.walletAddress}">${wallet.walletAddress}</a></code>`;
       });
 
-      await ctx.reply(
-        `YOUR WALLETS\n\n${walletMessages.join(
+      await ctx.replyWithHTML(
+        `💳 <b>Your Wallets</b>\n\n${walletMessages.join(
           "\n\n"
         )}\n\nUse /setdefault to change your default wallet.`,
         Markup.inlineKeyboard([
@@ -451,9 +459,9 @@ export async function handleKycStatus(ctx: Context): Promise<void> {
     const kycData = await getKycStatus(session.accessToken!);
 
     if (kycData.count === 0) {
-      await ctx.reply(
-        "KYC VERIFICATION\n\n" +
-          "CURRENT STATUS: ⏳ PENDING\n" +
+      await ctx.replyWithHTML(
+        "📋 <b>KYC Verification Status</b>\n\n" +
+          "<b>Current Status</b>: ⏳ PENDING\n" +
           "You need to complete your KYC verification on the Copperx platform to unlock all features of your account.",
         Markup.inlineKeyboard([
           Markup.button.url("🔒 Complete KYC", "https://copperx.io"),
@@ -488,12 +496,12 @@ export async function handleKycStatus(ctx: Context): Promise<void> {
       hour12: true,
     });
 
-    await ctx.reply(
-      `KYC VERIFICATION\n\n` +
-        `CURRENT STATUS: ${statusEmoji} ${kyc.status.toUpperCase()}\n` +
+    await ctx.replyWithHTML(
+      `📋 <b>KYC Verification Status</b>\n\n` +
+        `<b>Current Status</b>: ${statusEmoji} ${kyc.status.toUpperCase()}\n` +
         `${statusMessage}\n\n` +
-        `VERIFICATION DETAILS\n` +
-        `🗓 Date: ${dateStr} at ${timeStr}`,
+        `<b>Verification Details</b>\n` +
+        `🗓️ Approved Date: ${dateStr} at ${timeStr}`,
       Markup.inlineKeyboard([
         [Markup.button.callback("👤 View Profile", "view_profile")],
         [Markup.button.callback("<< Back to Menu", "back_to_menu")],
@@ -552,12 +560,12 @@ export async function handleDepositNetworkSelection(
       NETWORK_NAMES[selectedWallet.network] || selectedWallet.network;
     const walletAddress = selectedWallet.walletAddress;
 
-    await ctx.reply(
-      `DEPOSIT INSTRUCTIONS\n\n` +
+    await ctx.replyWithHTML(
+      `💎 <b>Deposit Instructions</b>\n\n` +
         `To deposit funds to your wallet:\n\n` +
-        `1. Send your funds to this address:\n${walletAddress}\n\n` +
-        `2. Make sure to select the correct network:\n${networkName}\n\n` +
-        `🚨 IMPORTANT:\n` +
+        `1. Send your funds to this address:\n<code><a href="https://example.com/address/${walletAddress}">${walletAddress}</a></code>\n\n` +
+        `2. Make sure to select the correct network:\n<b>${networkName}</b>\n\n` +
+        `⚠️ <b>Important</b>:\n` +
         `• Only send supported tokens\n` +
         `• Double-check the network before sending\n` +
         `• Minimum deposit amount may apply\n\n` +
@@ -609,8 +617,8 @@ export async function handleDeposit(ctx: Context): Promise<void> {
         ];
       });
 
-      await ctx.reply(
-        `DEPOSIT\n\nSelect a network to view your deposit address:`,
+      await ctx.replyWithHTML(
+        `📥 <b>Deposit</b>\n\nSelect a network to view your deposit address:`,
         Markup.inlineKeyboard([
           ...networkButtons,
           [Markup.button.callback("<< Back to Menu", "back_to_menu")],
@@ -639,55 +647,78 @@ export async function handleBalance(ctx: Context): Promise<void> {
     const session = sessionManager.getSession(chatId)!;
 
     try {
-      await ctx.reply("🔄 Fetching your wallet balances...");
+      // First send the fetching message
+      await ctx.reply("🔄 Fetching your wallets...");
 
       const wallets = await getWallets(session.accessToken!);
       const balances: BalanceResponse = await getBalances(session.accessToken!);
 
       if (!balances || balances.length === 0) {
         await ctx.reply(
-          "No wallets found. Contact support to set up your account."
+          "⚠️ No wallets found. Contact support to set up your account."
         );
         return;
       }
 
       const walletMap = new Map(wallets.map((w) => [w.id, w]));
-      const balanceMessage = balances
-        .map((wallet) => {
-          const walletInfo = walletMap.get(wallet.walletId);
-          const networkName =
-            NETWORK_NAMES[wallet.network] || `Unknown (${wallet.network})`;
-          const isDefault = wallet.isDefault
-            ? "✅ DEFAULT WALLET: "
-            : "WALLET: ";
-          const balanceDetails =
-            wallet.balances.length > 0
-              ? wallet.balances
-                  .map(
-                    (b) => ` • ${b.symbol}: ${parseFloat(b.balance).toFixed(6)}`
-                  )
-                  .join("\n")
-              : " • No balances";
-          return `${isDefault}${networkName}\n${balanceDetails}\n${walletInfo?.walletAddress}`;
-        })
-        .join("\n\n");
 
-      await ctx.reply(
-        `YOUR WALLET BALANCES\n\n${balanceMessage}\n\nUse /deposit to add funds or /setdefault to change your default wallet.`,
-        Markup.inlineKeyboard([
-          [Markup.button.callback("<< Back to Menu", "back_to_menu")],
-        ])
+      // Build the response message with HTML formatting for bold text
+      let message = "💰 <b>Your Wallet Balances</b>\n\n";
+
+      // Sort balances to put default wallet first
+      const sortedBalances = [...balances].sort(
+        (a, b) => (b.isDefault ? 1 : 0) - (a.isDefault ? 1 : 0)
       );
+
+      for (const wallet of sortedBalances) {
+        const walletInfo = walletMap.get(wallet.walletId)!;
+        const networkName = NETWORK_NAMES[wallet.network] || wallet.network;
+
+        if (wallet.isDefault) {
+          message += `✅ <b>Default Wallet</b> <i>(${networkName})</i>\n`;
+        } else {
+          message += `👛 <b>Wallet</b> <i>(${networkName})</i>\n`;
+        }
+
+        for (const balance of wallet.balances) {
+          message += `• <b>${balance.symbol}</b>: ${parseFloat(
+            balance.balance
+          ).toFixed(2)}\n`;
+        }
+
+        // Make address blue and formatted as code for easy copying
+        message += `<code><a href="https://example.com/address/${walletInfo.walletAddress}">${walletInfo.walletAddress}</a></code>\n`;
+
+        message += "\n";
+      }
+
+      message +=
+        "Use /deposit to add funds or /setdefault to change your default wallet.";
+
+      // Use HTML parse mode for formatting
+      await ctx.reply(message, {
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: "📥 Deposit", callback_data: "deposit" },
+              { text: "⚙️ Set Default", callback_data: "set_default_wallet" },
+            ],
+            [{ text: "« Back to Menu", callback_data: "back_to_menu" }],
+          ],
+        },
+      });
     } catch (error) {
       const err = error as Error;
       if (err.message.includes("401")) {
         sessionManager.deleteSession(chatId);
-        await ctx.reply(
-          "⚠️ Session expired. Please log in again.",
-          Markup.inlineKeyboard([
-            Markup.button.callback("🔑 Log In", "start_login"),
-          ])
-        );
+        await ctx.reply("⚠️ Session expired. Please log in again.", {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "🔑 Log In", callback_data: "start_login" }],
+            ],
+          },
+        });
         return;
       }
       await ctx.reply(`❌ Error: ${err.message}`);
@@ -720,8 +751,8 @@ export async function handleSetDefaultWallet(ctx: Context): Promise<void> {
         ),
       ]);
 
-      await ctx.reply(
-        `SET DEFAULT WALLET\n\nChoose a wallet to set as default:`,
+      await ctx.replyWithHTML(
+        `🗃️ <b>Set Default Wallet</b>\n\nChoose a wallet to set as default:`,
         Markup.inlineKeyboard([
           ...walletButtons,
           [Markup.button.callback("<< Back to Menu", "back_to_menu")],
@@ -774,6 +805,7 @@ export async function handleSetDefaultWalletSelection(
             "set_default_wallet"
           ),
         ],
+        [Markup.button.callback("<< Back to Menu", "back_to_menu")],
       ])
     );
   } catch (error) {
@@ -798,49 +830,14 @@ export async function handleSendMoneyMenu(ctx: Context): Promise<void> {
     const session = sessionManager.getSession(chatId)!;
 
     try {
-      await ctx.reply("🔄 Fetching your wallet balances...");
-
-      const wallets = await getWallets(session.accessToken!);
-      const balances: BalanceResponse = await getBalances(session.accessToken!);
-
-      if (!balances || balances.length === 0) {
-        await ctx.reply(
-          "No wallets found. Contact support to set up your account."
-        );
-        return;
-      }
-
-      const walletMap = new Map(wallets.map((w) => [w.id, w]));
-      const balanceMessage = balances
-        .map((wallet) => {
-          const walletInfo = walletMap.get(wallet.walletId);
-          const networkName =
-            NETWORK_NAMES[wallet.network] || `Unknown (${wallet.network})`;
-          const isDefault = wallet.isDefault
-            ? "✅ DEFAULT WALLET: "
-            : "WALLET: ";
-          const balanceDetails =
-            wallet.balances.length > 0
-              ? wallet.balances
-                  .map(
-                    (b) => ` • ${b.symbol}: ${parseFloat(b.balance).toFixed(6)}`
-                  )
-                  .join("\n")
-              : " • No balances";
-          return `${isDefault}${networkName}\n${balanceDetails}\n${walletInfo?.walletAddress}`;
-        })
-        .join("\n\n");
-
-      await ctx.reply(
-        `YOUR WALLET BALANCES\n\n${balanceMessage}\n\nUse /deposit to add funds or /setdefault to change your default wallet.\n\n` +
-          `SEND MONEY\n\nChoose how you'd like to send funds:`,
+      // Just send the send money menu without fetching or displaying balances
+      await ctx.replyWithHTML(
+        `📤 <b>Send Money</b>\n\n👇 Choose how you'd like to send funds:`,
         Markup.inlineKeyboard([
-          [
-            Markup.button.callback("📧 Send to Email", "start_sendemail"),
-            Markup.button.callback("💸 Send to Wallet", "start_send"),
-            Markup.button.callback("🏦 Bank Withdraw", "start_withdraw"),
-          ],
-          [Markup.button.callback("<< Back to Menu", "back_to_menu")],
+          [Markup.button.callback("📧 Send to Email", "start_sendemail")],
+          [Markup.button.callback("💸 Send to Wallet", "start_send")],
+          [Markup.button.callback("🏦 Bank Withdraw", "start_withdraw")],
+          [Markup.button.callback("« Back to Menu", "back_to_menu")],
         ])
       );
     } catch (error) {
@@ -1074,7 +1071,7 @@ export async function handlePayeeNickname(
         `Email: \`${result.email}\`\n` +
         `ID: \`${result.id}\``,
       Markup.inlineKeyboard([
-        [Markup.button.callback("📤 Send USDC", "start_send")],
+        [Markup.button.callback("📤 Send USDC", "send_money_menu")],
         [Markup.button.callback("➕ Add Another Payee", "start_addpayee")],
       ])
     );
@@ -1524,7 +1521,7 @@ export async function handleTransactionHistory(ctx: Context): Promise<void> {
           "✨ No transactions found. Start by sending or receiving USDC.",
           Markup.inlineKeyboard([
             Markup.button.callback("💵 Check Balance", "view_balance"),
-            Markup.button.callback("📤 Send USDC", "start_send"),
+            Markup.button.callback("📤 Send USDC", "send_money_menu"),
           ])
         );
         return;
@@ -1629,9 +1626,10 @@ export async function handleTransactionHistory(ctx: Context): Promise<void> {
           Markup.inlineKeyboard([
             [
               Markup.button.callback("💵 Check Balance", "view_balance"),
-              Markup.button.callback("📤 Send USDC", "start_send"),
+              Markup.button.callback("📤 Send USDC", "send_money_menu"),
               Markup.button.callback("🔄 Refresh", "view_history"),
             ],
+            [Markup.button.callback("<< Back to Menu", "back_to_menu")],
           ])
         );
       } catch (markdownError) {
@@ -1645,7 +1643,7 @@ export async function handleTransactionHistory(ctx: Context): Promise<void> {
           Markup.inlineKeyboard([
             [
               Markup.button.callback("💵 Check Balance", "view_balance"),
-              Markup.button.callback("📤 Send USDC", "start_send"),
+              Markup.button.callback("📤 Send USDC", "send_money_menu"),
               Markup.button.callback("🔄 Refresh", "view_history"),
             ],
           ])
