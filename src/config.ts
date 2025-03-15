@@ -7,6 +7,7 @@ export const NETWORK_NAMES: { [key: string]: string } = {
   "137": "Polygon",
   "42161": "Arbitrum",
   "8453": "Base",
+  "23434": "Starknet",
 };
 
 export interface UserSession {
