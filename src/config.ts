@@ -26,6 +26,18 @@ export interface UserSession {
     amount: number;
     payload: string;
   };
+  batchPaymentState?: {
+    payees: Array<{ email: string; amount: string }>;
+    step: "start" | "select_or_add_payee" | "add_amount" | "confirm"; // Updated step type
+    currentEmail?: string;
+    currentAmount?: string;
+    availablePayees: Array<{
+      id: string;
+      displayName: string;
+      email: string;
+      [key: string]: any;
+    }>; // Add availablePayees to store fetched payees
+  };
 }
 
 // Define response types
@@ -518,6 +530,63 @@ export interface WithdrawToBankResponse {
     bankRoutingNumber: string;
     bankAccountNumber: string;
   };
+}
+
+export interface BatchPaymentRequest {
+  requestId: string;
+  request: {
+    email?: string;
+    walletAddress?: string;
+    payeeId?: string;
+    amount: string;
+    purposeCode: string;
+    currency: string;
+  };
+}
+
+export interface BatchPaymentResponse {
+  responses: Array<{
+    requestId: string;
+    request: {
+      email?: string;
+      walletAddress?: string;
+      payeeId?: string;
+      amount: string;
+      purposeCode: string;
+      currency: string;
+    };
+    response?: {
+      id: string;
+      createdAt: string;
+      updatedAt: string;
+      organizationId: string;
+      status: string;
+      customerId: string | null;
+      type: string;
+      amount: string;
+      currency: string;
+      amountSubtotal: string;
+      totalFee: string;
+      feeCurrency: string;
+      invoiceNumber: string | null;
+      invoiceUrl: string | null;
+      purposeCode: string;
+      sourceAccountId: string;
+      destinationAccountId: string;
+      sourceCountry: string;
+      sourceOfFundsFile: string | null;
+      note: string | null;
+      destinationCountry: string;
+      isThirdPartyPayment: boolean | null;
+      destinationCurrency: string | null;
+      mode: string;
+    };
+    error?: {
+      message: any;
+      statusCode: number;
+      error: string;
+    };
+  }>;
 }
 
 export interface ErrorResponse {

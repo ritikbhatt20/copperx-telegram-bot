@@ -17,6 +17,7 @@ import {
   handleStartSendEmail,
   handleStartWithdraw,
   handleDeposit,
+  handleSendBatch,
 } from "./handlers/commandHandlers";
 import { disconnectPusherClient } from "./services/pusherClient";
 
@@ -75,6 +76,7 @@ bot.command("addpayee", handleStartAddPayee);
 bot.command("sendemail", handleStartSendEmail);
 bot.command("withdraw", handleStartWithdraw);
 bot.command("deposit", handleDeposit);
+bot.command("sendbatch", handleSendBatch);
 
 bot.on(message("text"), handleTextMessage);
 bot.on("callback_query", handleCallbackQuery);

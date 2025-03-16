@@ -16,6 +16,8 @@ import {
   AccountListResponse,
   OfframpQuoteResponse,
   WithdrawToBankResponse,
+  BatchPaymentResponse,
+  BatchPaymentRequest,
   ErrorResponse,
   AxiosError,
 } from "../config";
@@ -404,6 +406,30 @@ export async function getTransactionHistory(
     const axiosError = error as AxiosError<ErrorResponse>;
     throw new Error(
       `Failed to get transaction history: ${
+        axiosError.response?.data?.message || axiosError.message
+      }`
+    );
+  }
+}
+
+// Send batch payment
+export async function sendBatchPayment(
+  accessToken: string,
+  requests: BatchPaymentRequest[]
+): Promise<BatchPaymentResponse> {
+  try {
+    const response = await apiClient.post<BatchPaymentResponse>(
+      "/api/transfers/send-batch",
+      { requests },
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }
+    );
+    return response.data;
+  } catch (error) {
+    const axiosError = error as AxiosError<ErrorResponse>;
+    throw new Error(
+      `Failed to send batch payment: ${
         axiosError.response?.data?.message || axiosError.message
       }`
     );

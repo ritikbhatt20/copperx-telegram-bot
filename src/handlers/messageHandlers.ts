@@ -9,6 +9,8 @@ export async function handleTextMessage(ctx: Context): Promise<void> {
   const session = sessionManager.getSession(chatId);
   const text = (ctx.message as Message.TextMessage)?.text?.trim();
 
+  console.log(`Processing text message: ${text}, session state:`, session); // Debug log
+
   if (!text) {
     await ctx.reply(
       "I'm not sure what you're trying to do. Use /help to see available commands."
@@ -69,7 +71,13 @@ export async function handleTextMessage(ctx: Context): Promise<void> {
     return handleWithdrawAmount(ctx, text);
   }
 
-  // Fallback for any unmatched input
+  // Handle batch payment flow
+  if (session.batchPaymentState && session.batchPaymentState.step !== "start") {
+    const { handleSendBatch } = await import("./commandHandlers");
+    return handleSendBatch(ctx);
+  }
+
+  console.log(`Unhandled text message: ${text}`); // Debug log
   await ctx.reply(
     "I'm not sure what you're trying to do. Use /help to see available commands."
   );

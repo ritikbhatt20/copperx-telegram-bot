@@ -18,9 +18,12 @@ import {
   createOfframpTransfer,
   getTransactionHistory,
   withdrawToWallet,
+  sendBatchPayment,
 } from "../services/apiClient";
+import { UserSession } from "../config";
 import { BalanceResponse, NETWORK_NAMES } from "../config";
 import { initializePusherClient } from "../services/pusherClient";
+import { v4 as uuidv4 } from "uuid";
 
 interface SendState {
   step: "address" | "amount" | "confirm";
@@ -57,16 +60,13 @@ export async function handleStart(ctx: Context): Promise<void> {
   const chatId = ctx.chat?.id.toString();
   if (!chatId) return;
 
-  // Create initial session if it doesn't exist
   if (!sessionManager.getSession(chatId)) {
     sessionManager.setSession(chatId, { chatId });
   }
 
-  // Check if the user is logged in
   const isLoggedIn = sessionManager.isLoggedIn(chatId);
 
   if (!isLoggedIn) {
-    // User is not logged in, show login prompt
     await ctx.reply(
       "🚀 Welcome to CopperX Bot!\n\n" +
         "⚠️ You need to be logged in first to use this bot.\n\n" +
@@ -76,7 +76,6 @@ export async function handleStart(ctx: Context): Promise<void> {
       ])
     );
   } else {
-    // User is logged in, show the main menu
     await ctx.reply(
       "🚀 Welcome to CopperX Bot!\n\n" +
         "I'm here to help you manage your CopperX account. Choose an option below:",
@@ -98,9 +97,10 @@ export async function handleStart(ctx: Context): Promise<void> {
           Markup.button.callback("➕ Add Payee", "start_addpayee"),
         ],
         [
+          Markup.button.callback("📱 Batch Payment", "send_batch"),
           Markup.button.callback("📜 Transactions", "view_history"),
-          Markup.button.callback("🔒 Logout", "logout"),
         ],
+        [Markup.button.callback("🔒 Logout", "logout")],
       ])
     );
   }
@@ -124,10 +124,11 @@ export async function handleHelp(ctx: Context): Promise<void> {
     "• 🔒 /kyc - Check KYC status\n" +
     "• 🏦 /setdefault - Set your default wallet\n\n" +
     "*Transactions:*\n" +
-    "• 💰 /deposit - Deposit USDC to your account\n" + // Add this line
+    "• 💰 /deposit - Deposit USDC to your account\n" +
     "• 💵 /balance - Check wallet balances\n" +
     "• 📤 /send - Send USDC to a wallet\n" +
     "• 📧 /sendemail - Send USDC via email\n" +
+    "• 📱 /sendbatch - Send USDC to multiple payees\n" + // New command
     "• 🏦 /withdraw - Withdraw USDC to your bank account\n" +
     "• 📜 /history - View recent transactions\n" +
     "• ➕ /addpayee - Add a new payee\n\n" +
@@ -144,8 +145,12 @@ export async function handleHelp(ctx: Context): Promise<void> {
           Markup.button.callback("💸 Send Money", "send_money_menu"),
         ],
         [
+          Markup.button.callback("📱 Batch Payment", "send_batch"),
           Markup.button.callback("🏦 Withdraw to Bank", "start_withdraw"),
+        ],
+        [
           Markup.button.callback("➕ Add Payee", "start_addpayee"),
+          Markup.button.callback("📜 History", "view_history"),
         ],
       ]
     : [[Markup.button.callback("🔑 Log In", "start_login")]];
@@ -303,9 +308,10 @@ export async function handleOtpInput(ctx: Context, otp: string): Promise<void> {
           Markup.button.callback("➕ Add Payee", "start_addpayee"),
         ],
         [
+          Markup.button.callback("📱 Batch Payment", "send_batch"),
           Markup.button.callback("📜 Transactions", "view_history"),
-          Markup.button.callback("🔒 Logout", "logout"),
         ],
+        [Markup.button.callback("🔒 Logout", "logout")],
       ])
     );
   } catch (error) {
@@ -1041,14 +1047,14 @@ export async function handleCancelAction(ctx: Context): Promise<void> {
   const chatId = ctx.chat!.id.toString();
   const session = sessionManager.getSession(chatId);
   if (session) {
+    if (session.batchPaymentState) {
+      session.batchPaymentState.step = "start";
+      session.batchPaymentState.payees = [];
+      sessionManager.setSession(chatId, session);
+    }
     session.lastAction = undefined;
-    sessionManager.setSession(chatId, session);
   }
-
-  // Show cancellation message
   await ctx.reply("Action cancelled.");
-
-  // Call handleStart to return to the main menu
   await handleStart(ctx);
 }
 
@@ -1185,11 +1191,13 @@ export async function handleStartSendEmail(ctx: Context): Promise<void> {
 
       await ctx.replyWithMarkdown(
         "📤 *Send USDC via Email*\n\nChoose a payee to send USDC to:",
-        {
-          reply_markup: {
-            inline_keyboard: payeeButtons.map((btn) => [btn]),
-          },
-        }
+        Markup.inlineKeyboard([
+          ...payeeButtons.map((btn) => [btn]),
+          [
+            Markup.button.callback("➕ Add New Payee", "add_new_payee"),
+            Markup.button.callback("❌ Cancel", "cancel_action"),
+          ],
+        ])
       );
     } catch (error) {
       const err = error as Error;
@@ -1765,6 +1773,297 @@ export async function handleTransactionHistory(ctx: Context): Promise<void> {
       );
     }
   });
+}
+
+export async function handleSendBatch(ctx: Context): Promise<void> {
+  await requireAuth(ctx, async () => {
+    const chatId = ctx.chat!.id.toString();
+    const session = sessionManager.getSession(chatId)!;
+
+    // Initialize or reset batch payment state
+    if (!session.batchPaymentState) {
+      session.batchPaymentState = {
+        payees: [],
+        step: "start",
+        availablePayees: [],
+      };
+      sessionManager.setSession(chatId, session);
+    }
+
+    const batchState = session.batchPaymentState!;
+
+    switch (batchState.step) {
+      case "start":
+        await startBatchPayment(ctx, chatId, session);
+        break;
+      case "select_or_add_payee":
+        const text = (ctx.message as any)?.text?.trim();
+        if (text) {
+          await handleAddNewPayee(ctx, chatId, session, text);
+        } else {
+          await showPayeeSelection(ctx, chatId, session);
+        }
+        break;
+      case "add_amount":
+        const amountText = (ctx.message as any)?.text?.trim();
+        if (amountText) {
+          await handleAddAmount(ctx, chatId, session, amountText);
+        } else {
+          await ctx.reply(
+            "Please enter the amount in USDC (e.g., 1 for 1 USDC):",
+            Markup.inlineKeyboard([
+              [Markup.button.callback("❌ Cancel", "cancel_action")],
+            ])
+          );
+        }
+        break;
+      case "confirm":
+        await handleConfirmBatch(ctx, chatId, session);
+        break;
+    }
+  });
+}
+
+async function startBatchPayment(
+  ctx: Context,
+  chatId: string,
+  session: any
+): Promise<void> {
+  const batchState = session.batchPaymentState!;
+  try {
+    await ctx.reply("🔄 Fetching your payees...");
+    const payees = await getPayees(session.accessToken!);
+    batchState.availablePayees = payees.data;
+    batchState.step = "select_or_add_payee";
+    sessionManager.setSession(chatId, session);
+
+    if (payees.count === 0) {
+      await ctx.replyWithMarkdown(
+        "📭 *No Payees Found*\n\nYou need to add a payee to proceed. Enter a new payee's email:",
+        Markup.inlineKeyboard([
+          [Markup.button.callback("❌ Cancel", "cancel_action")],
+        ])
+      );
+    } else {
+      await showPayeeSelection(ctx, chatId, session);
+    }
+  } catch (error) {
+    const err = error as Error;
+    await ctx.replyWithMarkdown(
+      `❌ *Error*: ${err.message}\n\nPlease try again.`,
+      Markup.inlineKeyboard([
+        [Markup.button.callback("📤 Try Again", "send_batch")],
+        [Markup.button.callback("<< Back to Menu", "back_to_menu")],
+      ])
+    );
+  }
+}
+
+async function showPayeeSelection(
+  ctx: Context,
+  chatId: string,
+  session: any,
+  showConfirmButton: boolean = false // Add parameter to control Confirm button visibility
+): Promise<void> {
+  const batchState = session.batchPaymentState!;
+  const payeeButtons = batchState.availablePayees.map((payee: any) => ({
+    text: `${payee.displayName} (${payee.email})`,
+    callback_data: `batch_payee_${payee.email}`,
+  }));
+
+  // Build the keyboard with payee buttons and additional options
+  const keyboard = [
+    ...payeeButtons.map((btn: any) => [btn]),
+    [Markup.button.callback("➕ Add New Payee", "add_new_payee")],
+  ];
+
+  // Add Confirm Batch button if there are payees and showConfirmButton is true
+  if (showConfirmButton && batchState.payees.length > 0) {
+    keyboard.push([
+      Markup.button.callback("✅ Confirm Batch", "confirm_batch"),
+    ]);
+  }
+
+  // Always add Cancel button
+  keyboard.push([Markup.button.callback("❌ Cancel", "cancel_action")]);
+
+  await ctx.replyWithMarkdown(
+    `📱 *Batch Payment*\n\n` +
+      (batchState.payees.length > 0
+        ? `Current payees: ${batchState.payees.length}\n` +
+          batchState.payees
+            .map(
+              (payee: any) =>
+                `- ${payee.email}: ${(parseInt(payee.amount) / 1e8).toFixed(
+                  2
+                )} USDC`
+            )
+            .join("\n") +
+          "\n\n"
+        : "") +
+      "Choose a payee or enter a new email to add:",
+    Markup.inlineKeyboard(keyboard)
+  );
+}
+
+async function handleAddNewPayee(
+  ctx: Context,
+  chatId: string,
+  session: any,
+  text?: string
+): Promise<void> {
+  const batchState = session.batchPaymentState!;
+  const email = text || (ctx.message as any)?.text?.trim();
+
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    await ctx.replyWithMarkdown(
+      "⚠️ *Invalid Email*\n\nPlease enter a valid email address (e.g., user@example.com). Try again:",
+      Markup.inlineKeyboard([
+        [Markup.button.callback("❌ Cancel", "cancel_action")],
+      ])
+    );
+    return;
+  }
+
+  batchState.currentEmail = email;
+  batchState.step = "add_amount";
+  sessionManager.setSession(chatId, session);
+
+  await ctx.reply(
+    `📧 Email set: ${email}\n\nPlease enter the amount in USDC (e.g., 1 for 1 USDC):`,
+    Markup.inlineKeyboard([
+      [Markup.button.callback("❌ Cancel", "cancel_action")],
+    ])
+  );
+}
+
+async function handleAddAmount(
+  ctx: Context,
+  chatId: string,
+  session: any,
+  text?: string
+): Promise<void> {
+  const batchState = session.batchPaymentState!;
+  const amountText = text || (ctx.message as any)?.text?.trim();
+
+  if (!amountText) {
+    await ctx.reply(
+      "Please enter the amount in USDC (e.g., 1 for 1 USDC):",
+      Markup.inlineKeyboard([
+        [Markup.button.callback("❌ Cancel", "cancel_action")],
+      ])
+    );
+    return;
+  }
+
+  const amount = parseFloat(amountText);
+  if (isNaN(amount) || amount <= 0) {
+    await ctx.replyWithMarkdown(
+      "⚠️ *Invalid Amount*\n\nPlease enter a positive number (e.g., 1). Try again:",
+      Markup.inlineKeyboard([
+        [Markup.button.callback("❌ Cancel", "cancel_action")],
+      ])
+    );
+    return;
+  }
+
+  batchState.currentAmount = (amount * 1e8).toString();
+  batchState.payees.push({
+    email: batchState.currentEmail!,
+    amount: batchState.currentAmount,
+  });
+  batchState.step = "select_or_add_payee";
+  sessionManager.setSession(chatId, session);
+
+  // Instead of just showing confirm/cancel, re-display the payee selection menu
+  await ctx.replyWithMarkdown(
+    `💰 Amount set: ${amount} USDC for ${batchState.currentEmail}`
+  );
+  await showPayeeSelection(ctx, chatId, session, true); // Pass true to show Confirm button
+}
+
+export async function handleConfirmBatch(
+  ctx: Context,
+  chatId: string,
+  session: any
+): Promise<void> {
+  const batchState = session.batchPaymentState!;
+  if (batchState.payees.length === 0) {
+    await ctx.replyWithMarkdown(
+      "⚠️ *No Payees Added*\n\nNo payees have been added. Use /sendbatch to start again.",
+      Markup.inlineKeyboard([
+        [Markup.button.callback("📱 Start Batch Payment", "send_batch")],
+        [Markup.button.callback("<< Back to Menu", "back_to_menu")],
+      ])
+    );
+    batchState.step = "start";
+    sessionManager.setSession(chatId, session);
+    return;
+  }
+
+  try {
+    await ctx.reply("🔄 Sending batch payment...");
+
+    const requests = batchState.payees.map((payee: any, index: any) => ({
+      requestId: `batch-payment-${index + 1}-${uuidv4()}`,
+      request: {
+        email: payee.email,
+        amount: payee.amount,
+        purposeCode: "self",
+        currency: "USDC",
+      },
+    }));
+
+    const response = await sendBatchPayment(session.accessToken!, requests);
+
+    let message = "📱 *Batch Payment Initiated*\n\n";
+    response.responses.forEach((res) => {
+      message +=
+        `📧 ${res.request.email}:\n` +
+        `  - Amount: ${(parseInt(res.request.amount) / 1e8).toFixed(
+          2
+        )} USDC\n` +
+        `  - Status: ${
+          res.response?.status || res.error?.error || "unknown"
+        }\n` +
+        `  - Transaction ID: \`${res.response?.id || "N/A"}\`\n\n`;
+    });
+
+    batchState.payees = [];
+    batchState.step = "start";
+    sessionManager.setSession(chatId, session);
+
+    await ctx.replyWithMarkdown(
+      message,
+      Markup.inlineKeyboard([
+        [Markup.button.callback("📜 View History", "view_history")],
+        [Markup.button.callback("📱 Send Another Batch", "send_batch")],
+        [Markup.button.callback("<< Back to Menu", "back_to_menu")],
+      ])
+    );
+  } catch (error) {
+    const err = error as Error;
+    batchState.step = "start";
+    sessionManager.setSession(chatId, session);
+
+    if (err.message.includes("401")) {
+      sessionManager.deleteSession(chatId);
+      await ctx.reply(
+        "⚠️ Session expired. Please log in again.",
+        Markup.inlineKeyboard([
+          [Markup.button.callback("🔑 Log In", "start_login")],
+        ])
+      );
+      return;
+    }
+    await ctx.replyWithMarkdown(
+      `❌ *Error*: ${err.message}\n\nPlease try again or contact support.`,
+      Markup.inlineKeyboard([
+        [Markup.button.callback("📤 Try Again", "send_batch")],
+        [Markup.button.callback("<< Back to Menu", "back_to_menu")],
+      ])
+    );
+  }
 }
 
 // Request new OTP
