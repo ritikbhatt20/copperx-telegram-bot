@@ -1,4 +1,3 @@
-// bot.ts
 import { Telegraf, session } from "telegraf";
 import { message } from "telegraf/filters";
 import winston from "winston";

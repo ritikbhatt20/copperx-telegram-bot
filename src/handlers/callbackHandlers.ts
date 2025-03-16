@@ -1,5 +1,6 @@
 import { Context, Markup } from "telegraf";
 import { sessionManager } from "../bot";
+import QRCode from "qrcode";
 
 export async function handleCallbackQuery(ctx: Context): Promise<void> {
   if (!ctx.callbackQuery || !("data" in ctx.callbackQuery)) return;
@@ -43,7 +44,36 @@ export async function handleCallbackQuery(ctx: Context): Promise<void> {
 
   console.log("Callback data received:", data);
 
-  // Handle callback actions
+  if (data.startsWith("generate_qr_")) {
+    const walletAddress = data.replace("generate_qr_", "");
+
+    try {
+      // Generate QR code as a buffer
+      const qrCodeBuffer = await QRCode.toBuffer(walletAddress, {
+        type: "png",
+        width: 300, // Size of the QR code
+        errorCorrectionLevel: "H", // High error correction for reliability
+      });
+
+      // Send the QR code image
+      await ctx.replyWithPhoto(
+        { source: qrCodeBuffer },
+        {
+          caption: `Scan this QR code to deposit funds to:\n\`${walletAddress}\``,
+          parse_mode: "Markdown",
+          reply_markup: Markup.inlineKeyboard([
+            [Markup.button.callback("<< Back to Menu", "back_to_menu")],
+          ]).reply_markup,
+        }
+      );
+    } catch (error) {
+      const err = error as Error;
+      await ctx.reply(`❌ Error generating QR code: ${err.message}`);
+    }
+    return;
+  }
+
+  // Handle existing callback actions
   if (data === "start_login") return await handleStartLogin(ctx);
   if (data === "logout") return await handleLogout(ctx);
   if (data === "view_profile") return await handleProfile(ctx);
@@ -119,7 +149,7 @@ export async function handleCallbackQuery(ctx: Context): Promise<void> {
 
   if (data.startsWith("batch_payee_")) {
     const email = data.replace("batch_payee_", "");
-    const session = await sessionManager.getSession(chatId); // Use await here
+    const session = await sessionManager.getSession(chatId);
     if (!session) {
       await ctx.reply("⚠️ Session not found. Please start over with /start.");
       return;
@@ -139,7 +169,7 @@ export async function handleCallbackQuery(ctx: Context): Promise<void> {
   }
 
   if (data === "add_new_payee") {
-    const session = await sessionManager.getSession(chatId); // Use await here
+    const session = await sessionManager.getSession(chatId);
     if (!session) {
       await ctx.reply("⚠️ Session not found. Please start over with /start.");
       return;
@@ -158,7 +188,7 @@ export async function handleCallbackQuery(ctx: Context): Promise<void> {
   }
 
   if (data === "confirm_batch") {
-    const session = await sessionManager.getSession(chatId); // Use await here
+    const session = await sessionManager.getSession(chatId);
     if (!session) {
       await ctx.reply("⚠️ Session not found. Please start over with /start.");
       return;

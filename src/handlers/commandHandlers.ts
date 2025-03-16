@@ -686,8 +686,15 @@ export async function handleDepositNetworkSelection(
         `• Only send supported tokens\n` +
         `• Double-check the network before sending\n` +
         `• Minimum deposit amount may apply\n\n` +
-        `Use /history to check your recent Transaction History.`,
+        `Would you like a QR code for this address?`,
       Markup.inlineKeyboard([
+        [
+          Markup.button.callback(
+            "✅ Generate QR Code",
+            `generate_qr_${walletAddress}`
+          ),
+          Markup.button.callback("❌ No Thanks", "back_to_menu"),
+        ],
         [Markup.button.callback("<< Back to Menu", "back_to_menu")],
       ])
     );
