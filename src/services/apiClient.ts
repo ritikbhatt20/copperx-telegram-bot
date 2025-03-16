@@ -31,6 +31,19 @@ const apiClient = axios.create({
   },
 });
 
+// Helper function to handle rate limit errors
+function handleRateLimitError(error: AxiosError<ErrorResponse>): void {
+  if (error.response?.status === 429) {
+    const retryAfter = error.response?.headers?.["retry-after"];
+    const retryTime = retryAfter
+      ? parseInt(retryAfter, 10) || 60 // Default to 60 seconds if parsing fails
+      : 60;
+    throw new Error(
+      `Rate limit exceeded. Please try again in ${retryTime} seconds.`
+    );
+  }
+}
+
 // Request OTP
 export async function requestOtp(email: string): Promise<OtpRequestResponse> {
   try {
@@ -41,6 +54,7 @@ export async function requestOtp(email: string): Promise<OtpRequestResponse> {
     return response.data;
   } catch (error) {
     const axiosError = error as AxiosError<ErrorResponse>;
+    handleRateLimitError(axiosError);
     throw new Error(
       `Failed to request OTP: ${
         axiosError.response?.data?.message || axiosError.message
@@ -63,6 +77,7 @@ export async function authenticateOtp(
     return response.data;
   } catch (error) {
     const axiosError = error as AxiosError<ErrorResponse>;
+    handleRateLimitError(axiosError);
     throw new Error(
       `Failed to authenticate: ${
         axiosError.response?.data?.message || axiosError.message

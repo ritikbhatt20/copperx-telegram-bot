@@ -233,20 +233,30 @@ export async function handleEmailInput(
     );
   } catch (error) {
     const err = error as Error;
-    await ctx.reply(`❌ Error: ${err.message}`);
+    if (err.message.includes("Rate limit exceeded")) {
+      await ctx.reply(
+        `⏳ ${err.message}\n\nPlease wait before requesting another OTP.`,
+        Markup.inlineKeyboard([
+          Markup.button.callback("🔄 Try Again Later", "start_login"),
+          Markup.button.callback("❌ Cancel", "cancel_login"),
+        ])
+      );
+    } else {
+      await ctx.reply(`❌ Error: ${err.message}`);
 
-    // Reset login state
-    await sessionManager.setSession(chatId, {
-      loginState: "waiting_for_email",
-    });
+      // Reset login state
+      await sessionManager.setSession(chatId, {
+        loginState: "waiting_for_email",
+      });
 
-    await ctx.reply(
-      "Would you like to try again?",
-      Markup.inlineKeyboard([
-        Markup.button.callback("🔄 Try Again", "start_login"),
-        Markup.button.callback("❌ Cancel", "cancel_login"),
-      ])
-    );
+      await ctx.reply(
+        "Would you like to try again?",
+        Markup.inlineKeyboard([
+          Markup.button.callback("🔄 Try Again", "start_login"),
+          Markup.button.callback("❌ Cancel", "cancel_login"),
+        ])
+      );
+    }
   }
 }
 
@@ -326,15 +336,26 @@ export async function handleOtpInput(ctx: Context, otp: string): Promise<void> {
     );
   } catch (error) {
     const err = error as Error;
-    await ctx.reply(`❌ Error: ${err.message}`);
-    await ctx.reply(
-      "Would you like to try again?",
-      Markup.inlineKeyboard([
-        Markup.button.callback("🔄 Try New OTP", "request_new_otp"),
-        Markup.button.callback("📧 Change Email", "start_login"),
-        Markup.button.callback("❌ Cancel", "cancel_login"),
-      ])
-    );
+    if (err.message.includes("Rate limit exceeded")) {
+      await ctx.reply(
+        `⏳ ${err.message}\n\nPlease wait before trying again.`,
+        Markup.inlineKeyboard([
+          Markup.button.callback("🔄 Try New OTP Later", "request_new_otp"),
+          Markup.button.callback("📧 Change Email", "start_login"),
+          Markup.button.callback("❌ Cancel", "cancel_login"),
+        ])
+      );
+    } else {
+      await ctx.reply(`❌ Error: ${err.message}`);
+      await ctx.reply(
+        "Would you like to try again?",
+        Markup.inlineKeyboard([
+          Markup.button.callback("🔄 Try New OTP", "request_new_otp"),
+          Markup.button.callback("📧 Change Email", "start_login"),
+          Markup.button.callback("❌ Cancel", "cancel_login"),
+        ])
+      );
+    }
   }
 }
 
@@ -2433,15 +2454,24 @@ export async function handleRequestNewOtp(ctx: Context): Promise<void> {
     );
   } catch (error) {
     const err = error as Error;
-    await ctx.reply(`❌ Error: ${err.message}`);
-
-    await ctx.reply(
-      "Would you like to try again?",
-      Markup.inlineKeyboard([
-        Markup.button.callback("🔄 Try Again", "start_login"),
-        Markup.button.callback("❌ Cancel", "cancel_login"),
-      ])
-    );
+    if (err.message.includes("Rate limit exceeded")) {
+      await ctx.reply(
+        `⏳ ${err.message}\n\nPlease wait before requesting another OTP.`,
+        Markup.inlineKeyboard([
+          Markup.button.callback("🔄 Try Again Later", "request_new_otp"),
+          Markup.button.callback("❌ Cancel", "cancel_login"),
+        ])
+      );
+    } else {
+      await ctx.reply(`❌ Error: ${err.message}`);
+      await ctx.reply(
+        "Would you like to try again?",
+        Markup.inlineKeyboard([
+          Markup.button.callback("🔄 Try Again", "start_login"),
+          Markup.button.callback("❌ Cancel", "cancel_login"),
+        ])
+      );
+    }
   }
 }
 
