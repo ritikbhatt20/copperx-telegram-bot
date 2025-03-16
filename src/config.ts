@@ -412,6 +412,11 @@ export interface PayeeListResponse {
   }>;
 }
 
+export interface DeletePayeeResponse {
+  message: string;
+  statusCode: number;
+}
+
 export interface SendResponse {
   id: string;
   createdAt: string;

@@ -40,6 +40,9 @@ export async function handleCallbackQuery(ctx: Context): Promise<void> {
     handleConfirmBatch,
     handlePoints,
     handleDepositNetworkSelection,
+    handleRemovePayee,
+    handleRemovePayeeConfirmation,
+    handleConfirmRemovePayee,
   } = await import("./commandHandlers");
 
   console.log("Callback data received:", data);
@@ -202,6 +205,16 @@ export async function handleCallbackQuery(ctx: Context): Promise<void> {
       "⚠️ No batch payment in progress. Use /sendbatch to start."
     );
     return;
+  }
+
+  if (data === "removepayee") return await handleRemovePayee(ctx);
+  if (data.startsWith("remove_payee_")) {
+    const payeeId = data.replace("remove_payee_", "");
+    return await handleRemovePayeeConfirmation(ctx, payeeId);
+  }
+  if (data.startsWith("confirm_remove_")) {
+    const payeeId = data.replace("confirm_remove_", "");
+    return await handleConfirmRemovePayee(ctx, payeeId);
   }
 
   // Fallback for unknown callbacks

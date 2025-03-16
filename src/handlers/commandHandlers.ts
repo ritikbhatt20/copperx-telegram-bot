@@ -11,6 +11,7 @@ import {
   setDefaultWallet,
   createPayee,
   getPayees,
+  deletePayee,
   sendToUser,
   getWalletBalance,
   getAccounts,
@@ -99,13 +100,14 @@ export async function handleStart(ctx: Context): Promise<void> {
           Markup.button.callback("➕ Add Payee", "start_addpayee"),
         ],
         [
+          Markup.button.callback("🗑️ Remove Payee", "removepayee"),
           Markup.button.callback("📱 Batch Payment", "send_batch"),
-          Markup.button.callback("📜 Transactions", "view_history"),
         ],
         [
+          Markup.button.callback("📜 Transactions", "view_history"),
           Markup.button.callback("💎 View Points", "view_points"),
-          Markup.button.callback("🔒 Logout", "logout"),
         ],
+        [Markup.button.callback("🔒 Logout", "logout")],
       ])
     );
   }
@@ -137,6 +139,7 @@ export async function handleHelp(ctx: Context): Promise<void> {
     "• 🏦 /withdraw - Withdraw USDC to your bank account\n" +
     "• 📜 /history - View recent transactions\n" +
     "• ➕ /addpayee - Add a new payee\n\n" +
+    "• 🗑️ /removepayee - Remove an existing payee\n\n" +
     "*Rewards:*\n" +
     "• 💎 /points - View your Copperx Mint points\n\n" +
     "*Support:* https://t.me/copperxcommunity/2183";
@@ -157,7 +160,11 @@ export async function handleHelp(ctx: Context): Promise<void> {
         ],
         [
           Markup.button.callback("➕ Add Payee", "start_addpayee"),
+          Markup.button.callback("🗑️ Remove Payee", "removepayee"),
+        ],
+        [
           Markup.button.callback("📜 History", "view_history"),
+          Markup.button.callback("💎 Points", "view_points"),
         ],
       ]
     : [[Markup.button.callback("🔑 Log In", "start_login")]];
@@ -325,13 +332,14 @@ export async function handleOtpInput(ctx: Context, otp: string): Promise<void> {
           Markup.button.callback("➕ Add Payee", "start_addpayee"),
         ],
         [
+          Markup.button.callback("🗑️ Remove Payee", "removepayee"),
           Markup.button.callback("📱 Batch Payment", "send_batch"),
-          Markup.button.callback("📜 Transactions", "view_history"),
         ],
         [
+          Markup.button.callback("📜 Transactions", "view_history"),
           Markup.button.callback("💎 View Points", "view_points"),
-          Markup.button.callback("🔒 Logout", "logout"),
         ],
+        [Markup.button.callback("🔒 Logout", "logout")],
       ])
     );
   } catch (error) {
@@ -1389,6 +1397,194 @@ export async function handlePayeeNickname(
       `❌ Error: ${err.message}`,
       Markup.inlineKeyboard([
         Markup.button.callback("<< Back to Menu", "back_to_menu"),
+      ])
+    );
+  }
+}
+
+export async function handleRemovePayee(ctx: Context): Promise<void> {
+  await requireAuth(ctx, async () => {
+    const chatId = ctx.chat!.id.toString();
+    const session = await sessionManager.getSession(chatId);
+    if (!session) {
+      await ctx.reply(
+        "⚠️ Session not found. Please log in again.",
+        Markup.inlineKeyboard([
+          [Markup.button.callback("🔑 Log In", "start_login")],
+        ])
+      );
+      return;
+    }
+
+    try {
+      await ctx.reply("🔄 Fetching your payees...");
+      const payees = await getPayees(session.accessToken!);
+
+      if (payees.count === 0) {
+        await ctx.replyWithMarkdown(
+          "📭 *No Payees Found*\n\nYou don’t have any payees to remove. Use /addpayee to add one.",
+          Markup.inlineKeyboard([
+            [Markup.button.callback("➕ Add Payee", "start_addpayee")],
+            [Markup.button.callback("<< Back to Menu", "back_to_menu")],
+          ])
+        );
+        return;
+      }
+
+      const payeeButtons = payees.data.map((payee) => ({
+        text: `${payee.displayName} (${payee.email})`,
+        callback_data: `remove_payee_${payee.id}`,
+      }));
+
+      await sessionManager.setSession(chatId, {
+        ...session,
+        lastAction: "removepayee",
+      });
+
+      await ctx.replyWithMarkdown(
+        "🗑️ *Remove Payee*\n\nChoose a payee to remove:",
+        Markup.inlineKeyboard([
+          ...payeeButtons.map((btn) => [btn]),
+          [Markup.button.callback("❌ Cancel", "cancel_action")],
+        ])
+      );
+    } catch (error) {
+      const err = error as Error;
+      if (err.message.includes("401")) {
+        await sessionManager.deleteSession(chatId);
+        await ctx.reply(
+          "⚠️ Session expired. Please log in again.",
+          Markup.inlineKeyboard([
+            [Markup.button.callback("🔑 Log In", "start_login")],
+          ])
+        );
+        return;
+      }
+      await ctx.reply(
+        `❌ Error: ${err.message}`,
+        Markup.inlineKeyboard([
+          [Markup.button.callback("<< Back to Menu", "back_to_menu")],
+        ])
+      );
+    }
+  });
+}
+
+// Confirm payee removal
+export async function handleRemovePayeeConfirmation(
+  ctx: Context,
+  payeeId: string
+): Promise<void> {
+  const chatId = ctx.chat!.id.toString();
+  const session = await sessionManager.getSession(chatId);
+  if (!session || !session.accessToken) {
+    await ctx.reply(
+      "⚠️ Session not found or not logged in. Please log in again.",
+      Markup.inlineKeyboard([
+        [Markup.button.callback("🔑 Log In", "start_login")],
+      ])
+    );
+    return;
+  }
+
+  try {
+    await ctx.reply("🔄 Fetching payee details...");
+    const payees = await getPayees(session.accessToken!);
+    const payee = payees.data.find((p) => p.id === payeeId);
+    if (!payee) {
+      await ctx.reply(
+        "⚠️ Payee not found.",
+        Markup.inlineKeyboard([
+          [Markup.button.callback("🗑️ Try Again", "removepayee")],
+          [Markup.button.callback("<< Back to Menu", "back_to_menu")],
+        ])
+      );
+      return;
+    }
+
+    await ctx.replyWithMarkdown(
+      `🗑️ *Confirm Remove Payee*\n\n` +
+        `Name: \`${payee.displayName}\`\n` +
+        `Email: \`${payee.email}\`\n\n` +
+        `Are you sure you want to remove this payee?`,
+      Markup.inlineKeyboard([
+        [
+          Markup.button.callback("✅ Confirm", `confirm_remove_${payeeId}`),
+          Markup.button.callback("❌ Cancel", "cancel_action"),
+        ],
+      ])
+    );
+  } catch (error) {
+    const err = error as Error;
+    await ctx.reply(
+      `❌ Error: ${err.message}`,
+      Markup.inlineKeyboard([
+        [Markup.button.callback("<< Back to Menu", "back_to_menu")],
+      ])
+    );
+  }
+}
+
+export async function handleConfirmRemovePayee(
+  ctx: Context,
+  payeeId: string
+): Promise<void> {
+  const chatId = ctx.chat!.id.toString();
+  const session = await sessionManager.getSession(chatId);
+  if (!session || !session.accessToken) {
+    await ctx.reply(
+      "⚠️ Session not found or not logged in. Please log in again.",
+      Markup.inlineKeyboard([
+        [Markup.button.callback("🔑 Log In", "start_login")],
+      ])
+    );
+    return;
+  }
+
+  try {
+    await ctx.reply("🔄 Removing payee...");
+    const payees = await getPayees(session.accessToken!);
+    const payee = payees.data.find((p) => p.id === payeeId);
+    if (!payee) {
+      throw new Error("Payee not found.");
+    }
+
+    const result = await deletePayee(session.accessToken, payeeId);
+
+    await sessionManager.setSession(chatId, {
+      ...session,
+      lastAction: undefined,
+    });
+
+    await ctx.replyWithMarkdown(
+      `✅ *Payee Removed!*\n\n` +
+        `Name: \`${payee.displayName}\`\n` +
+        `Email: \`${payee.email}\`\n`,
+      Markup.inlineKeyboard([
+        [Markup.button.callback("🗑️ Remove Another", "removepayee")],
+        [Markup.button.callback("<< Back to Menu", "back_to_menu")],
+      ])
+    );
+  } catch (error) {
+    const err = error as Error;
+    await sessionManager.setSession(chatId, {
+      ...session,
+      lastAction: undefined,
+    });
+    if (err.message.includes("401")) {
+      await sessionManager.deleteSession(chatId);
+      await ctx.reply(
+        "⚠️ Session expired. Please log in again.",
+        Markup.inlineKeyboard([
+          [Markup.button.callback("🔑 Log In", "start_login")],
+        ])
+      );
+      return;
+    }
+    await ctx.reply(
+      `❌ Error: ${err.message}`,
+      Markup.inlineKeyboard([
+        [Markup.button.callback("<< Back to Menu", "back_to_menu")],
       ])
     );
   }

@@ -11,6 +11,7 @@ import {
   WithdrawResponse,
   PayeeAdditionResponse,
   PayeeListResponse,
+  DeletePayeeResponse,
   SendResponse,
   WalletBalanceResponse,
   AccountListResponse,
@@ -294,6 +295,29 @@ export async function getPayees(
     const axiosError = error as AxiosError<ErrorResponse>;
     throw new Error(
       `Failed to fetch payees: ${
+        axiosError.response?.data?.message || axiosError.message
+      }`
+    );
+  }
+}
+
+// Delete a payee
+export async function deletePayee(
+  accessToken: string,
+  payeeId: string
+): Promise<DeletePayeeResponse> {
+  try {
+    const response = await apiClient.delete<DeletePayeeResponse>(
+      `/api/payees/${payeeId}`,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }
+    );
+    return response.data;
+  } catch (error) {
+    const axiosError = error as AxiosError<ErrorResponse>;
+    throw new Error(
+      `Failed to delete payee: ${
         axiosError.response?.data?.message || axiosError.message
       }`
     );

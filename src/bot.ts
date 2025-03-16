@@ -14,6 +14,7 @@ import {
   handleTransactionHistory,
   handleSetDefaultWallet,
   handleStartAddPayee,
+  handleRemovePayee,
   handleStartSendEmail,
   handleStartWithdraw,
   handleDeposit,
@@ -73,6 +74,7 @@ bot.command("setdefault", handleSetDefaultWallet);
 bot.command("send", handleStartSend);
 bot.command("history", handleTransactionHistory);
 bot.command("addpayee", handleStartAddPayee);
+bot.command("removepayee", handleRemovePayee);
 bot.command("sendemail", handleStartSendEmail);
 bot.command("withdraw", handleStartWithdraw);
 bot.command("deposit", handleDeposit);
