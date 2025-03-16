@@ -19,6 +19,7 @@ import {
   BatchPaymentResponse,
   BatchPaymentRequest,
   ErrorResponse,
+  PointsResponse,
   AxiosError,
 } from "../config";
 
@@ -83,6 +84,27 @@ export async function getProfile(
     const axiosError = error as AxiosError<ErrorResponse>;
     throw new Error(
       `Failed to get profile: ${
+        axiosError.response?.data?.message || axiosError.message
+      }`
+    );
+  }
+}
+
+// Fetch total Copperx Mint points for a user
+export async function getTotalPoints(
+  email: string,
+  accessToken: string
+): Promise<PointsResponse> {
+  try {
+    const response = await apiClient.get<PointsResponse>("/api/points/total", {
+      params: { email },
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    return response.data;
+  } catch (error) {
+    const axiosError = error as AxiosError<ErrorResponse>;
+    throw new Error(
+      `Failed to fetch points: ${
         axiosError.response?.data?.message || axiosError.message
       }`
     );

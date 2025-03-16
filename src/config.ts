@@ -40,6 +40,10 @@ export interface UserSession {
   };
 }
 
+export interface PointsResponse {
+  total: number;
+}
+
 // Define response types
 export interface OtpRequestResponse {
   email: string;

@@ -37,6 +37,7 @@ export async function handleCallbackQuery(ctx: Context): Promise<void> {
     handleStart,
     handleSendBatch,
     handleConfirmBatch,
+    handlePoints,
   } = await import("./commandHandlers");
 
   console.log("Callback data received:", data);
@@ -60,6 +61,7 @@ export async function handleCallbackQuery(ctx: Context): Promise<void> {
   if (data === "show_help") return handleHelp(ctx);
   if (data === "back_to_menu") return handleStart(ctx);
   if (data === "send_batch") return handleSendBatch(ctx);
+  if (data === "view_points") return handlePoints(ctx);
 
   if (data.startsWith("set_default_wallet_")) {
     const walletId = data.replace("set_default_wallet_", "");

@@ -19,6 +19,7 @@ import {
   getTransactionHistory,
   withdrawToWallet,
   sendBatchPayment,
+  getTotalPoints,
 } from "../services/apiClient";
 import { UserSession } from "../config";
 import { BalanceResponse, NETWORK_NAMES } from "../config";
@@ -100,7 +101,10 @@ export async function handleStart(ctx: Context): Promise<void> {
           Markup.button.callback("📱 Batch Payment", "send_batch"),
           Markup.button.callback("📜 Transactions", "view_history"),
         ],
-        [Markup.button.callback("🔒 Logout", "logout")],
+        [
+          Markup.button.callback("💎 View Points", "view_points"),
+          Markup.button.callback("🔒 Logout", "logout"),
+        ],
       ])
     );
   }
@@ -128,10 +132,12 @@ export async function handleHelp(ctx: Context): Promise<void> {
     "• 💵 /balance - Check wallet balances\n" +
     "• 📤 /send - Send USDC to a wallet\n" +
     "• 📧 /sendemail - Send USDC via email\n" +
-    "• 📱 /sendbatch - Send USDC to multiple payees\n" + // New command
+    "• 📤 /sendbatch - Send USDC to multiple payees\n" +
     "• 🏦 /withdraw - Withdraw USDC to your bank account\n" +
     "• 📜 /history - View recent transactions\n" +
     "• ➕ /addpayee - Add a new payee\n\n" +
+    "*Rewards:*\n" +
+    "• 💎 /points - View your Copperx Mint points\n\n" +
     "*Support:* https://t.me/copperxcommunity/2183";
 
   const keyboardButtons = isLoggedIn
@@ -145,12 +151,15 @@ export async function handleHelp(ctx: Context): Promise<void> {
           Markup.button.callback("💸 Send Money", "send_money_menu"),
         ],
         [
-          Markup.button.callback("📱 Batch Payment", "send_batch"),
+          Markup.button.callback("📤 Batch Send", "send_batch"),
           Markup.button.callback("🏦 Withdraw to Bank", "start_withdraw"),
         ],
         [
           Markup.button.callback("➕ Add Payee", "start_addpayee"),
           Markup.button.callback("📜 History", "view_history"),
+        ],
+        [
+          Markup.button.callback("💎 View Points", "view_points"),
         ],
       ]
     : [[Markup.button.callback("🔑 Log In", "start_login")]];
@@ -311,7 +320,10 @@ export async function handleOtpInput(ctx: Context, otp: string): Promise<void> {
           Markup.button.callback("📱 Batch Payment", "send_batch"),
           Markup.button.callback("📜 Transactions", "view_history"),
         ],
-        [Markup.button.callback("🔒 Logout", "logout")],
+        [
+          Markup.button.callback("💎 View Points", "view_points"),
+          Markup.button.callback("🔒 Logout", "logout"),
+        ],
       ])
     );
   } catch (error) {
@@ -412,6 +424,66 @@ export async function handleProfile(ctx: Context): Promise<void> {
 
     await ctx.reply(`❌ Error: ${err.message}`);
   }
+}
+
+export async function handlePoints(ctx: Context): Promise<void> {
+  await requireAuth(ctx, async () => {
+    const chatId = ctx.chat!.id.toString();
+    const session = sessionManager.getSession(chatId)!;
+
+    if (!session.email) {
+      await ctx.reply(
+        "⚠️ Email not found in session. Please log in again.",
+        Markup.inlineKeyboard([
+          [Markup.button.callback("🔑 Log In", "start_login")],
+        ])
+      );
+      return;
+    }
+
+    try {
+      await ctx.reply("🔄 Fetching your Copperx Mint points...");
+      const pointsResponse = await getTotalPoints(
+        session.email,
+        session.accessToken!
+      );
+
+      const tweetText = encodeURIComponent(
+        `I have earned ${pointsResponse.total} points on Copperx Mint! 🚀 Join me and start earning too! #CopperxMint #CryptoPayments`
+      );
+      const tweetUrl = `https://twitter.com/intent/tweet?text=${tweetText}`;
+
+      await ctx.replyWithMarkdown(
+        `💎 *Your Copperx Mint Points*\n\n` +
+          `Email: \`${session.email}\`\n` +
+          `Total Points: 🟡*${pointsResponse.total}*\n\n` +
+          `Share your achievement on X (Twitter)!`,
+        Markup.inlineKeyboard([
+          [Markup.button.url("📢 Share on X", tweetUrl)],
+          [Markup.button.callback("<< Back to Menu", "back_to_menu")],
+        ])
+      );
+    } catch (error) {
+      const err = error as Error;
+      if (err.message.includes("401")) {
+        sessionManager.deleteSession(chatId);
+        await ctx.reply(
+          "⚠️ Session expired. Please log in again.",
+          Markup.inlineKeyboard([
+            [Markup.button.callback("🔑 Log In", "start_login")],
+          ])
+        );
+        return;
+      }
+      await ctx.replyWithMarkdown(
+        `❌ *Error*: ${err.message}\n\nPlease try again or contact support.`,
+        Markup.inlineKeyboard([
+          [Markup.button.callback("🔄 Try Again", "view_points")],
+          [Markup.button.callback("<< Back to Menu", "back_to_menu")],
+        ])
+      );
+    }
+  });
 }
 
 export async function handleWallets(ctx: Context): Promise<void> {
