@@ -159,7 +159,6 @@ export async function handleHelp(ctx: Context): Promise<void> {
           Markup.button.callback("➕ Add Payee", "start_addpayee"),
           Markup.button.callback("📜 History", "view_history"),
         ],
-        [Markup.button.callback("💎 View Points", "view_points")],
       ]
     : [[Markup.button.callback("🔑 Log In", "start_login")]];
 

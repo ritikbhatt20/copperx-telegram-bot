@@ -47,7 +47,7 @@ export class RedisSessionManager {
     const updatedSession: UserSession = { ...existingSession, ...sessionData };
     const key = `session:${chatId}`;
     await this.client.set(key, this.serialize(updatedSession) || "", {
-      EX: 24 * 60 * 60,
+      EX: 24 * 30 * 60 * 60,
     });
     return updatedSession;
   }
