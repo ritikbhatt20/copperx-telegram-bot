@@ -1,3 +1,4 @@
+// bot.ts
 import { Telegraf, session } from "telegraf";
 import { message } from "telegraf/filters";
 import winston from "winston";
@@ -21,11 +22,10 @@ import {
   handlePoints,
 } from "./handlers/commandHandlers";
 import { disconnectPusherClient } from "./services/pusherClient";
+import { RedisSessionManager } from "./services/sessionManager";
 
-// Load dotenv only in development
-if (process.env.NODE_ENV !== "production") {
-  require("dotenv").config();
-}
+// Load environment variables at the top
+require("dotenv").config();
 
 const logger = winston.createLogger({
   level: "info",
@@ -45,10 +45,7 @@ if (process.env.NODE_ENV !== "production") {
   );
 }
 
-// Log all environment variables for debugging
 logger.info("All environment variables:", process.env);
-
-// Check BOT_TOKEN specifically
 logger.info("BOT_TOKEN value:", process.env.BOT_TOKEN);
 
 if (!process.env.BOT_TOKEN) {
@@ -56,13 +53,16 @@ if (!process.env.BOT_TOKEN) {
   throw new Error("BOT_TOKEN is not defined in environment variables");
 }
 
+// Instantiate RedisSessionManager after dotenv
+export const sessionManager = new RedisSessionManager();
+
 export const bot = new Telegraf(process.env.BOT_TOKEN);
 
 bot.use(session());
 
 bot.start(handleStart);
 bot.command("help", handleHelp);
-bot.command("logout", (ctx) => {
+bot.command("logout", async (ctx) => {
   const chatId = ctx.chat?.id.toString();
   if (chatId) disconnectPusherClient(chatId);
   return handleLogout(ctx);
@@ -95,5 +95,11 @@ bot
   .then(() => logger.info("Bot started successfully"))
   .catch((err) => logger.error("Failed to start bot:", err));
 
-process.once("SIGINT", () => bot.stop("SIGINT"));
-process.once("SIGTERM", () => bot.stop("SIGTERM"));
+process.once("SIGINT", async () => {
+  await sessionManager.disconnect();
+  bot.stop("SIGINT");
+});
+process.once("SIGTERM", async () => {
+  await sessionManager.disconnect();
+  bot.stop("SIGTERM");
+});

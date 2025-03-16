@@ -1,12 +1,12 @@
 import { Context } from "telegraf";
 import { Message } from "telegraf/typings/core/types/typegram";
-import { sessionManager } from "../services/sessionManager";
+import { sessionManager } from "../bot";
 
 export async function handleTextMessage(ctx: Context): Promise<void> {
   const chatId = ctx.chat?.id.toString();
   if (!chatId) return;
 
-  const session = sessionManager.getSession(chatId);
+  const session = await sessionManager.getSession(chatId);
   const text = (ctx.message as Message.TextMessage)?.text?.trim();
 
   console.log(`Processing text message: ${text}, session state:`, session); // Debug log

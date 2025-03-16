@@ -1,6 +1,6 @@
 import { Context, Markup } from "telegraf";
 import { Message } from "telegraf/typings/core/types/typegram";
-import { sessionManager } from "../services/sessionManager";
+import { sessionManager } from "../bot";
 import {
   requestOtp,
   authenticateOtp,
@@ -61,11 +61,12 @@ export async function handleStart(ctx: Context): Promise<void> {
   const chatId = ctx.chat?.id.toString();
   if (!chatId) return;
 
-  if (!sessionManager.getSession(chatId)) {
-    sessionManager.setSession(chatId, { chatId });
+  const existingSession = await sessionManager.getSession(chatId);
+  if (!existingSession) {
+    await sessionManager.setSession(chatId, { chatId });
   }
 
-  const isLoggedIn = sessionManager.isLoggedIn(chatId);
+  const isLoggedIn = await sessionManager.isLoggedIn(chatId);
 
   if (!isLoggedIn) {
     await ctx.reply(
@@ -115,7 +116,7 @@ export async function handleHelp(ctx: Context): Promise<void> {
   const chatId = ctx.chat?.id.toString();
   if (!chatId) return;
 
-  const isLoggedIn = sessionManager.isLoggedIn(chatId);
+  const isLoggedIn = await sessionManager.isLoggedIn(chatId);
 
   const helpMessage =
     "*Copperx Payout Bot Commands* 📋\n\n" +
@@ -158,9 +159,7 @@ export async function handleHelp(ctx: Context): Promise<void> {
           Markup.button.callback("➕ Add Payee", "start_addpayee"),
           Markup.button.callback("📜 History", "view_history"),
         ],
-        [
-          Markup.button.callback("💎 View Points", "view_points"),
-        ],
+        [Markup.button.callback("💎 View Points", "view_points")],
       ]
     : [[Markup.button.callback("🔑 Log In", "start_login")]];
 
@@ -178,14 +177,14 @@ export async function handleStartLogin(ctx: Context): Promise<void> {
     return;
   }
 
-  if (sessionManager.isLoggedIn(chatId)) {
+  if (await sessionManager.isLoggedIn(chatId)) {
     await ctx.reply(
       "You're already logged in! Use /profile to view your account or /logout to sign out."
     );
     return;
   }
 
-  sessionManager.setSession(chatId, { loginState: "waiting_for_email" });
+  await sessionManager.setSession(chatId, { loginState: "waiting_for_email" });
 
   await ctx.reply(
     "📧 Please enter your email address to receive a one-time password (OTP):",
@@ -204,8 +203,7 @@ export async function handleEmailInput(
     return;
   }
 
-  const session = sessionManager.getSession(chatId);
-
+  const session = await sessionManager.getSession(chatId);
   if (!session || session.loginState !== "waiting_for_email") {
     return;
   }
@@ -222,7 +220,7 @@ export async function handleEmailInput(
 
     const { sid } = await requestOtp(email);
 
-    sessionManager.setSession(chatId, {
+    await sessionManager.setSession(chatId, {
       email,
       sid,
       loginState: "waiting_for_otp",
@@ -239,7 +237,9 @@ export async function handleEmailInput(
     await ctx.reply(`❌ Error: ${err.message}`);
 
     // Reset login state
-    sessionManager.setSession(chatId, { loginState: "waiting_for_email" });
+    await sessionManager.setSession(chatId, {
+      loginState: "waiting_for_email",
+    });
 
     await ctx.reply(
       "Would you like to try again?",
@@ -256,8 +256,7 @@ export async function handleOtpInput(ctx: Context, otp: string): Promise<void> {
   const chatId = ctx.chat?.id.toString();
   if (!chatId) return;
 
-  const session = sessionManager.getSession(chatId);
-
+  const session = await sessionManager.getSession(chatId);
   if (
     !session ||
     session.loginState !== "waiting_for_otp" ||
@@ -286,7 +285,7 @@ export async function handleOtpInput(ctx: Context, otp: string): Promise<void> {
     const organizationId =
       profile.organizationId || "180ad9b1-3d7b-49cc-a901-f8a9b7727800"; // Fallback from your getWallets response
 
-    sessionManager.setSession(chatId, {
+    await sessionManager.setSession(chatId, {
       accessToken,
       expireAt,
       loginState: "logged_in",
@@ -345,14 +344,14 @@ export async function handleLogout(ctx: Context): Promise<void> {
   const chatId = ctx.chat?.id.toString();
   if (!chatId) return;
 
-  if (!sessionManager.isLoggedIn(chatId)) {
+  if (!(await sessionManager.isLoggedIn(chatId))) {
     await ctx.reply(
       "You're not currently logged in. Use /login to sign in to your account."
     );
     return;
   }
 
-  sessionManager.deleteSession(chatId);
+  await sessionManager.deleteSession(chatId);
 
   await ctx.reply(
     "👋 You've been successfully logged out of your Copperx account.",
@@ -367,9 +366,8 @@ export async function handleProfile(ctx: Context): Promise<void> {
   const chatId = ctx.chat?.id.toString();
   if (!chatId) return;
 
-  const session = sessionManager.getSession(chatId);
-
-  if (!session || !sessionManager.isLoggedIn(chatId)) {
+  const session = await sessionManager.getSession(chatId);
+  if (!session || !(await sessionManager.isLoggedIn(chatId))) {
     await ctx.reply(
       "⚠️ You need to be logged in to view your profile.",
       Markup.inlineKeyboard([
@@ -412,7 +410,7 @@ export async function handleProfile(ctx: Context): Promise<void> {
     const err = error as Error;
 
     if (err.message.includes("401") || err.message.includes("unauthorized")) {
-      sessionManager.deleteSession(chatId);
+      await sessionManager.deleteSession(chatId);
       await ctx.reply(
         "⚠️ Your session has expired. Please log in again.",
         Markup.inlineKeyboard([
@@ -429,7 +427,16 @@ export async function handleProfile(ctx: Context): Promise<void> {
 export async function handlePoints(ctx: Context): Promise<void> {
   await requireAuth(ctx, async () => {
     const chatId = ctx.chat!.id.toString();
-    const session = sessionManager.getSession(chatId)!;
+    const session = await sessionManager.getSession(chatId);
+    if (!session) {
+      await ctx.reply(
+        "⚠️ Session not found. Please log in again.",
+        Markup.inlineKeyboard([
+          [Markup.button.callback("🔑 Log In", "start_login")],
+        ])
+      );
+      return;
+    }
 
     if (!session.email) {
       await ctx.reply(
@@ -466,7 +473,7 @@ export async function handlePoints(ctx: Context): Promise<void> {
     } catch (error) {
       const err = error as Error;
       if (err.message.includes("401")) {
-        sessionManager.deleteSession(chatId);
+        await sessionManager.deleteSession(chatId);
         await ctx.reply(
           "⚠️ Session expired. Please log in again.",
           Markup.inlineKeyboard([
@@ -489,7 +496,16 @@ export async function handlePoints(ctx: Context): Promise<void> {
 export async function handleWallets(ctx: Context): Promise<void> {
   await requireAuth(ctx, async () => {
     const chatId = ctx.chat!.id.toString();
-    const session = sessionManager.getSession(chatId)!;
+    const session = await sessionManager.getSession(chatId);
+    if (!session) {
+      await ctx.reply(
+        "⚠️ Session not found. Please log in again.",
+        Markup.inlineKeyboard([
+          [Markup.button.callback("🔑 Log In", "start_login")],
+        ])
+      );
+      return;
+    }
 
     try {
       await ctx.reply("🔄 Fetching your wallets...");
@@ -525,7 +541,7 @@ export async function handleWallets(ctx: Context): Promise<void> {
     } catch (error) {
       const err = error as Error;
       if (err.message.includes("401")) {
-        sessionManager.deleteSession(chatId);
+        await sessionManager.deleteSession(chatId);
         await ctx.reply(
           "⚠️ Session expired. Please log in again.",
           Markup.inlineKeyboard([
@@ -544,9 +560,8 @@ export async function handleKycStatus(ctx: Context): Promise<void> {
   const chatId = ctx.chat?.id.toString();
   if (!chatId) return;
 
-  const session = sessionManager.getSession(chatId);
-
-  if (!session || !sessionManager.isLoggedIn(chatId)) {
+  const session = await sessionManager.getSession(chatId);
+  if (!session || !(await sessionManager.isLoggedIn(chatId))) {
     await ctx.reply(
       "⚠️ You need to be logged in to check your KYC status.",
       Markup.inlineKeyboard([
@@ -614,7 +629,7 @@ export async function handleKycStatus(ctx: Context): Promise<void> {
     const err = error as Error;
 
     if (err.message.includes("401") || err.message.includes("unauthorized")) {
-      sessionManager.deleteSession(chatId);
+      await sessionManager.deleteSession(chatId);
       await ctx.reply(
         "⚠️ Your session has expired. Please log in again.",
         Markup.inlineKeyboard([
@@ -635,7 +650,7 @@ export async function handleDepositNetworkSelection(
   const chatId = ctx.chat?.id.toString();
   if (!chatId) return;
 
-  const session = sessionManager.getSession(chatId);
+  const session = await sessionManager.getSession(chatId);
   if (!session || !session.accessToken) {
     await ctx.reply(
       "⚠️ You need to be logged in to view deposit addresses.",
@@ -649,7 +664,7 @@ export async function handleDepositNetworkSelection(
   try {
     await ctx.reply("🔄 Fetching your wallet address...");
 
-    const wallets = await getWallets(session.accessToken!);
+    const wallets = await getWallets(session.accessToken);
     const selectedWallet = wallets.find((w) => w.network === network);
 
     if (!selectedWallet) {
@@ -680,7 +695,7 @@ export async function handleDepositNetworkSelection(
   } catch (error) {
     const err = error as Error;
     if (err.message.includes("401")) {
-      sessionManager.deleteSession(chatId);
+      await sessionManager.deleteSession(chatId);
       await ctx.reply(
         "⚠️ Session expired. Please log in again.",
         Markup.inlineKeyboard([
@@ -696,7 +711,16 @@ export async function handleDepositNetworkSelection(
 export async function handleDeposit(ctx: Context): Promise<void> {
   await requireAuth(ctx, async () => {
     const chatId = ctx.chat!.id.toString();
-    const session = sessionManager.getSession(chatId)!;
+    const session = await sessionManager.getSession(chatId);
+    if (!session) {
+      await ctx.reply(
+        "⚠️ Session not found. Please log in again.",
+        Markup.inlineKeyboard([
+          [Markup.button.callback("🔑 Log In", "start_login")],
+        ])
+      );
+      return;
+    }
 
     try {
       await ctx.reply("🔄 Fetching your deposit options...");
@@ -730,7 +754,7 @@ export async function handleDeposit(ctx: Context): Promise<void> {
     } catch (error) {
       const err = error as Error;
       if (err.message.includes("401")) {
-        sessionManager.deleteSession(chatId);
+        await sessionManager.deleteSession(chatId);
         await ctx.reply(
           "⚠️ Session expired. Please log in again.",
           Markup.inlineKeyboard([
@@ -747,7 +771,16 @@ export async function handleDeposit(ctx: Context): Promise<void> {
 export async function handleBalance(ctx: Context): Promise<void> {
   await requireAuth(ctx, async () => {
     const chatId = ctx.chat!.id.toString();
-    const session = sessionManager.getSession(chatId)!;
+    const session = await sessionManager.getSession(chatId);
+    if (!session) {
+      await ctx.reply(
+        "⚠️ Session not found. Please log in again.",
+        Markup.inlineKeyboard([
+          [Markup.button.callback("🔑 Log In", "start_login")],
+        ])
+      );
+      return;
+    }
 
     try {
       // First send the fetching message
@@ -814,7 +847,7 @@ export async function handleBalance(ctx: Context): Promise<void> {
     } catch (error) {
       const err = error as Error;
       if (err.message.includes("401")) {
-        sessionManager.deleteSession(chatId);
+        await sessionManager.deleteSession(chatId);
         await ctx.reply("⚠️ Session expired. Please log in again.", {
           reply_markup: {
             inline_keyboard: [
@@ -832,7 +865,16 @@ export async function handleBalance(ctx: Context): Promise<void> {
 export async function handleSetDefaultWallet(ctx: Context): Promise<void> {
   await requireAuth(ctx, async () => {
     const chatId = ctx.chat!.id.toString();
-    const session = sessionManager.getSession(chatId)!;
+    const session = await sessionManager.getSession(chatId);
+    if (!session) {
+      await ctx.reply(
+        "⚠️ Session not found. Please log in again.",
+        Markup.inlineKeyboard([
+          [Markup.button.callback("🔑 Log In", "start_login")],
+        ])
+      );
+      return;
+    }
 
     try {
       await ctx.reply("🔄 Fetching your wallets...");
@@ -864,7 +906,7 @@ export async function handleSetDefaultWallet(ctx: Context): Promise<void> {
     } catch (error) {
       const err = error as Error;
       if (err.message.includes("401")) {
-        sessionManager.deleteSession(chatId);
+        await sessionManager.deleteSession(chatId);
         await ctx.reply(
           "⚠️ Session expired. Please log in again.",
           Markup.inlineKeyboard([
@@ -890,8 +932,16 @@ export async function handleSetDefaultWalletSelection(
   const chatId = ctx.chat?.id.toString();
   if (!chatId) return;
 
-  const session = sessionManager.getSession(chatId);
-  if (!session || !session.accessToken) return;
+  const session = await sessionManager.getSession(chatId);
+  if (!session || !session.accessToken) {
+    await ctx.reply(
+      "⚠️ Session not found or not logged in. Please log in again.",
+      Markup.inlineKeyboard([
+        Markup.button.callback("🔑 Log In", "start_login"),
+      ])
+    );
+    return;
+  }
 
   try {
     await ctx.reply("🔄 Setting default wallet...");
@@ -919,7 +969,7 @@ export async function handleSetDefaultWalletSelection(
   } catch (error) {
     const err = error as Error;
     if (err.message.includes("401")) {
-      sessionManager.deleteSession(chatId);
+      await sessionManager.deleteSession(chatId);
       await ctx.reply(
         "⚠️ Session expired. Please log in again.",
         Markup.inlineKeyboard([
@@ -940,7 +990,16 @@ export async function handleSetDefaultWalletSelection(
 export async function handleSendMoneyMenu(ctx: Context): Promise<void> {
   await requireAuth(ctx, async () => {
     const chatId = ctx.chat!.id.toString();
-    const session = sessionManager.getSession(chatId)!;
+    const session = await sessionManager.getSession(chatId);
+    if (!session) {
+      await ctx.reply(
+        "⚠️ Session not found. Please log in again.",
+        Markup.inlineKeyboard([
+          [Markup.button.callback("🔑 Log In", "start_login")],
+        ])
+      );
+      return;
+    }
 
     try {
       // Just send the send money menu without fetching or displaying balances
@@ -956,7 +1015,7 @@ export async function handleSendMoneyMenu(ctx: Context): Promise<void> {
     } catch (error) {
       const err = error as Error;
       if (err.message.includes("401")) {
-        sessionManager.deleteSession(chatId);
+        await sessionManager.deleteSession(chatId);
         await ctx.reply(
           "⚠️ Session expired. Please log in again.",
           Markup.inlineKeyboard([
@@ -978,10 +1037,18 @@ export async function handleSendMoneyMenu(ctx: Context): Promise<void> {
 export async function handleStartSend(ctx: Context): Promise<void> {
   await requireAuth(ctx, async () => {
     const chatId = ctx.chat!.id.toString();
-    const session = sessionManager.getSession(chatId)!;
+    const session = await sessionManager.getSession(chatId);
+    if (!session) {
+      await ctx.reply(
+        "⚠️ Session not found. Please log in again.",
+        Markup.inlineKeyboard([
+          [Markup.button.callback("🔑 Log In", "start_login")],
+        ])
+      );
+      return;
+    }
 
-    session.lastAction = "send"; // Start send flow
-    sessionManager.setSession(chatId, session);
+    await sessionManager.setSession(chatId, { ...session, lastAction: "send" });
 
     await ctx.replyWithMarkdown(
       "📤 *Send USDC*\n\nPlease enter the wallet address to send funds to:",
@@ -997,7 +1064,16 @@ export async function handleSendAddress(
   walletAddress: string
 ): Promise<void> {
   const chatId = ctx.chat!.id.toString();
-  const session = sessionManager.getSession(chatId)!;
+  const session = await sessionManager.getSession(chatId);
+  if (!session) {
+    await ctx.reply(
+      "⚠️ Session not found. Please log in again.",
+      Markup.inlineKeyboard([
+        [Markup.button.callback("🔑 Log In", "start_login")],
+      ])
+    );
+    return;
+  }
 
   if (!walletAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
     await ctx.reply(
@@ -1006,8 +1082,10 @@ export async function handleSendAddress(
     return;
   }
 
-  session.lastAction = `send_to_${walletAddress}`;
-  sessionManager.setSession(chatId, session);
+  await sessionManager.setSession(chatId, {
+    ...session,
+    lastAction: `send_to_${walletAddress}`,
+  });
 
   await ctx.replyWithMarkdown(
     `📤 *Send USDC*\n\nWallet address: \`${walletAddress}\`\n\nPlease enter the amount in USDC:`,
@@ -1022,7 +1100,16 @@ export async function handleSendAmount(
   amountStr: string
 ): Promise<void> {
   const chatId = ctx.chat!.id.toString();
-  const session = sessionManager.getSession(chatId)!;
+  const session = await sessionManager.getSession(chatId);
+  if (!session || !session.lastAction) {
+    await ctx.reply(
+      "⚠️ Session not found or invalid state. Please start over with /send.",
+      Markup.inlineKeyboard([
+        [Markup.button.callback("📤 Start Send", "start_send")],
+      ])
+    );
+    return;
+  }
 
   const amount = parseFloat(amountStr.trim());
   if (isNaN(amount) || amount <= 0) {
@@ -1032,9 +1119,11 @@ export async function handleSendAmount(
     return;
   }
 
-  const walletAddress = session.lastAction!.split("_to_")[1];
-  session.lastAction = `send_to_${walletAddress}_amount_${amount}`;
-  sessionManager.setSession(chatId, session);
+  const walletAddress = session.lastAction.split("_to_")[1];
+  await sessionManager.setSession(chatId, {
+    ...session,
+    lastAction: `send_to_${walletAddress}_amount_${amount}`,
+  });
 
   await ctx.replyWithMarkdown(
     `📤 *Confirm Send*\n\n` +
@@ -1059,9 +1148,16 @@ export async function handleSendConfirmation(
   amount: number
 ): Promise<void> {
   const chatId = ctx.chat!.id.toString();
-  const session = sessionManager.getSession(chatId);
-
-  if (!session || !session.accessToken) return;
+  const session = await sessionManager.getSession(chatId);
+  if (!session || !session.accessToken) {
+    await ctx.reply(
+      "⚠️ Session not found or not logged in. Please log in again.",
+      Markup.inlineKeyboard([
+        [Markup.button.callback("🔑 Log In", "start_login")],
+      ])
+    );
+    return;
+  }
 
   try {
     await ctx.reply("🔄 Sending funds...");
@@ -1075,8 +1171,10 @@ export async function handleSendConfirmation(
 
     const result = await withdrawToWallet(session.accessToken, withdrawData);
 
-    session.lastAction = undefined; // Clear state
-    sessionManager.setSession(chatId, session);
+    await sessionManager.setSession(chatId, {
+      ...session,
+      lastAction: undefined,
+    });
 
     await ctx.replyWithMarkdown(
       `✅ *Funds Sent!*\n\n` +
@@ -1092,11 +1190,13 @@ export async function handleSendConfirmation(
     );
   } catch (error) {
     const err = error as Error;
-    session.lastAction = undefined; // Clear state on error
-    sessionManager.setSession(chatId, session);
+    await sessionManager.setSession(chatId, {
+      ...session,
+      lastAction: undefined,
+    });
 
     if (err.message.includes("401")) {
-      sessionManager.deleteSession(chatId);
+      await sessionManager.deleteSession(chatId);
       await ctx.reply(
         "⚠️ Session expired. Please log in again.",
         Markup.inlineKeyboard([
@@ -1117,14 +1217,18 @@ export async function handleSendConfirmation(
 // Update handleCancelAction to clear send state
 export async function handleCancelAction(ctx: Context): Promise<void> {
   const chatId = ctx.chat!.id.toString();
-  const session = sessionManager.getSession(chatId);
+  const session = await sessionManager.getSession(chatId);
   if (session) {
     if (session.batchPaymentState) {
       session.batchPaymentState.step = "start";
       session.batchPaymentState.payees = [];
-      sessionManager.setSession(chatId, session);
+      await sessionManager.setSession(chatId, session);
+    } else {
+      await sessionManager.setSession(chatId, {
+        ...session,
+        lastAction: undefined,
+      });
     }
-    session.lastAction = undefined;
   }
   await ctx.reply("Action cancelled.");
   await handleStart(ctx);
@@ -1133,10 +1237,21 @@ export async function handleCancelAction(ctx: Context): Promise<void> {
 export async function handleStartAddPayee(ctx: Context): Promise<void> {
   await requireAuth(ctx, async () => {
     const chatId = ctx.chat!.id.toString();
-    const session = sessionManager.getSession(chatId)!;
+    const session = await sessionManager.getSession(chatId);
+    if (!session) {
+      await ctx.reply(
+        "⚠️ Session not found. Please log in again.",
+        Markup.inlineKeyboard([
+          [Markup.button.callback("🔑 Log In", "start_login")],
+        ])
+      );
+      return;
+    }
 
-    session.lastAction = "addpayee";
-    sessionManager.setSession(chatId, session);
+    await sessionManager.setSession(chatId, {
+      ...session,
+      lastAction: "addpayee",
+    });
 
     await ctx.replyWithMarkdown(
       "➕ *Add Payee*\n\nPlease enter the payee's email address:",
@@ -1152,7 +1267,16 @@ export async function handlePayeeEmail(
   email: string
 ): Promise<void> {
   const chatId = ctx.chat!.id.toString();
-  const session = sessionManager.getSession(chatId)!;
+  const session = await sessionManager.getSession(chatId);
+  if (!session || !session.lastAction) {
+    await ctx.reply(
+      "⚠️ Session not found or invalid state. Please start over with /addpayee.",
+      Markup.inlineKeyboard([
+        [Markup.button.callback("➕ Add Payee", "start_addpayee")],
+      ])
+    );
+    return;
+  }
 
   if (!email.includes("@") || !email.includes(".")) {
     await ctx.reply(
@@ -1161,8 +1285,10 @@ export async function handlePayeeEmail(
     return;
   }
 
-  session.lastAction = `addpayee_email_${email}`;
-  sessionManager.setSession(chatId, session);
+  await sessionManager.setSession(chatId, {
+    ...session,
+    lastAction: `addpayee_email_${email}`,
+  });
 
   await ctx.replyWithMarkdown(
     `➕ *Add Payee*\n\nEmail: \`${email}\`\n\nPlease enter the payee's nickname:`,
@@ -1177,9 +1303,18 @@ export async function handlePayeeNickname(
   nickName: string
 ): Promise<void> {
   const chatId = ctx.chat!.id.toString();
-  const session = sessionManager.getSession(chatId)!;
+  const session = await sessionManager.getSession(chatId);
+  if (!session || !session.lastAction) {
+    await ctx.reply(
+      "⚠️ Session not found or invalid state. Please start over with /addpayee.",
+      Markup.inlineKeyboard([
+        [Markup.button.callback("➕ Add Payee", "start_addpayee")],
+      ])
+    );
+    return;
+  }
 
-  const email = session.lastAction!.split("_email_")[1];
+  const email = session.lastAction.split("_email_")[1];
 
   try {
     await ctx.reply("🔄 Adding payee...");
@@ -1191,8 +1326,10 @@ export async function handlePayeeNickname(
 
     const result = await createPayee(session.accessToken!, payeeData);
 
-    session.lastAction = undefined;
-    sessionManager.setSession(chatId, session);
+    await sessionManager.setSession(chatId, {
+      ...session,
+      lastAction: undefined,
+    });
 
     await ctx.replyWithMarkdown(
       `✅ *Payee Added!*\n\n` +
@@ -1206,11 +1343,13 @@ export async function handlePayeeNickname(
     );
   } catch (error) {
     const err = error as Error;
-    session.lastAction = undefined;
-    sessionManager.setSession(chatId, session);
+    await sessionManager.setSession(chatId, {
+      ...session,
+      lastAction: undefined,
+    });
 
     if (err.message.includes("401")) {
-      sessionManager.deleteSession(chatId);
+      await sessionManager.deleteSession(chatId);
       await ctx.reply(
         "⚠️ Session expired. Please log in again.",
         Markup.inlineKeyboard([
@@ -1231,15 +1370,26 @@ export async function handlePayeeNickname(
 export async function handleStartSendEmail(ctx: Context): Promise<void> {
   await requireAuth(ctx, async () => {
     const chatId = ctx.chat!.id.toString();
-    const session = sessionManager.getSession(chatId)!;
+    const session = await sessionManager.getSession(chatId);
+    if (!session) {
+      await ctx.reply(
+        "⚠️ Session not found. Please log in again.",
+        Markup.inlineKeyboard([
+          [Markup.button.callback("🔑 Log In", "start_login")],
+        ])
+      );
+      return;
+    }
 
     try {
       await ctx.reply("🔄 Fetching your payees...");
       const payees = await getPayees(session.accessToken!);
 
       if (payees.count === 0) {
-        session.lastAction = undefined;
-        sessionManager.setSession(chatId, session);
+        await sessionManager.setSession(chatId, {
+          ...session,
+          lastAction: undefined,
+        });
         await ctx.replyWithMarkdown(
           "📭 *No Payees Found*\n\nYou need to add a payee before sending USDC via email. Use /addpayee to add one now.",
           {
@@ -1258,8 +1408,10 @@ export async function handleStartSendEmail(ctx: Context): Promise<void> {
         callback_data: `sendemail_to_${payee.email}`,
       }));
 
-      session.lastAction = "sendemail";
-      sessionManager.setSession(chatId, session);
+      await sessionManager.setSession(chatId, {
+        ...session,
+        lastAction: "sendemail",
+      });
 
       await ctx.replyWithMarkdown(
         "📤 *Send USDC via Email*\n\nChoose a payee to send USDC to:",
@@ -1273,8 +1425,10 @@ export async function handleStartSendEmail(ctx: Context): Promise<void> {
       );
     } catch (error) {
       const err = error as Error;
-      session.lastAction = undefined;
-      sessionManager.setSession(chatId, session);
+      await sessionManager.setSession(chatId, {
+        ...session,
+        lastAction: undefined,
+      });
       await ctx.reply(
         `❌ Error: ${err.message}`,
         Markup.inlineKeyboard([
@@ -1290,10 +1444,21 @@ export async function handleSendEmailPayee(
   email: string
 ): Promise<void> {
   const chatId = ctx.chat!.id.toString();
-  const session = sessionManager.getSession(chatId)!;
+  const session = await sessionManager.getSession(chatId);
+  if (!session) {
+    await ctx.reply(
+      "⚠️ Session not found. Please log in again.",
+      Markup.inlineKeyboard([
+        [Markup.button.callback("🔑 Log In", "start_login")],
+      ])
+    );
+    return;
+  }
 
-  session.lastAction = `sendemail_to_${email}`;
-  sessionManager.setSession(chatId, session);
+  await sessionManager.setSession(chatId, {
+    ...session,
+    lastAction: `sendemail_to_${email}`,
+  });
 
   await ctx.replyWithMarkdown(
     `📤 *Send USDC via Email*\n\nEmail: \`${email}\`\n\nPlease enter the amount in USDC:`,
@@ -1308,7 +1473,16 @@ export async function handleSendEmailAmount(
   amountStr: string
 ): Promise<void> {
   const chatId = ctx.chat!.id.toString();
-  const session = sessionManager.getSession(chatId)!;
+  const session = await sessionManager.getSession(chatId);
+  if (!session || !session.lastAction) {
+    await ctx.reply(
+      "⚠️ Session not found or invalid state. Please start over with /sendemail.",
+      Markup.inlineKeyboard([
+        [Markup.button.callback("📧 Send Email", "start_sendemail")],
+      ])
+    );
+    return;
+  }
 
   const amount = parseFloat(amountStr.trim());
   if (isNaN(amount) || amount <= 0) {
@@ -1318,9 +1492,11 @@ export async function handleSendEmailAmount(
     return;
   }
 
-  const email = session.lastAction!.split("_to_")[1];
-  session.lastAction = `sendemail_to_${email}_amount_${amount}`;
-  sessionManager.setSession(chatId, session);
+  const email = session.lastAction.split("_to_")[1];
+  await sessionManager.setSession(chatId, {
+    ...session,
+    lastAction: `sendemail_to_${email}_amount_${amount}`,
+  });
 
   await ctx.replyWithMarkdown(
     `📤 *Confirm Send via Email*\n\n` +
@@ -1345,9 +1521,16 @@ export async function handleSendEmailConfirmation(
   amount: number
 ): Promise<void> {
   const chatId = ctx.chat!.id.toString();
-  const session = sessionManager.getSession(chatId);
-
-  if (!session || !session.accessToken) return;
+  const session = await sessionManager.getSession(chatId);
+  if (!session || !session.accessToken) {
+    await ctx.reply(
+      "⚠️ Session not found or not logged in. Please log in again.",
+      Markup.inlineKeyboard([
+        [Markup.button.callback("🔑 Log In", "start_login")],
+      ])
+    );
+    return;
+  }
 
   try {
     await ctx.reply("🔄 Sending funds...");
@@ -1361,8 +1544,10 @@ export async function handleSendEmailConfirmation(
 
     const result = await sendToUser(session.accessToken, sendData);
 
-    session.lastAction = undefined;
-    sessionManager.setSession(chatId, session);
+    await sessionManager.setSession(chatId, {
+      ...session,
+      lastAction: undefined,
+    });
 
     await ctx.replyWithMarkdown(
       `✅ *Funds Sent!*\n\n` +
@@ -1378,11 +1563,13 @@ export async function handleSendEmailConfirmation(
     );
   } catch (error) {
     const err = error as Error;
-    session.lastAction = undefined;
-    sessionManager.setSession(chatId, session);
+    await sessionManager.setSession(chatId, {
+      ...session,
+      lastAction: undefined,
+    });
 
     if (err.message.includes("401")) {
-      sessionManager.deleteSession(chatId);
+      await sessionManager.deleteSession(chatId);
       await ctx.reply(
         "⚠️ Session expired. Please log in again.",
         Markup.inlineKeyboard([
@@ -1403,15 +1590,26 @@ export async function handleSendEmailConfirmation(
 export async function handleStartWithdraw(ctx: Context): Promise<void> {
   await requireAuth(ctx, async () => {
     const chatId = ctx.chat!.id.toString();
-    const session = sessionManager.getSession(chatId)!;
+    const session = await sessionManager.getSession(chatId);
+    if (!session) {
+      await ctx.reply(
+        "⚠️ Session not found. Please log in again.",
+        Markup.inlineKeyboard([
+          [Markup.button.callback("🔑 Log In", "start_login")],
+        ])
+      );
+      return;
+    }
 
     try {
       await ctx.reply("🔄 Fetching your balance...");
       const balance = await getWalletBalance(session.accessToken!);
       const usdcBalance = parseInt(balance.balance);
 
-      session.lastAction = "withdraw";
-      sessionManager.setSession(chatId, session);
+      await sessionManager.setSession(chatId, {
+        ...session,
+        lastAction: "withdraw",
+      });
 
       await ctx.replyWithMarkdown(
         `🏦 *Withdraw USDC to Bank*\n\nYour balance: *${usdcBalance.toFixed(
@@ -1438,7 +1636,16 @@ export async function handleWithdrawAmount(
   amountStr: string
 ): Promise<void> {
   const chatId = ctx.chat!.id.toString();
-  const session = sessionManager.getSession(chatId)!;
+  const session = await sessionManager.getSession(chatId);
+  if (!session || !session.lastAction) {
+    await ctx.reply(
+      "⚠️ Session not found or invalid state. Please start over with /withdraw.",
+      Markup.inlineKeyboard([
+        [Markup.button.callback("🏦 Withdraw", "start_withdraw")],
+      ])
+    );
+    return;
+  }
 
   const amount = parseFloat(amountStr.trim());
   if (isNaN(amount) || amount <= 0) {
@@ -1468,8 +1675,10 @@ export async function handleWithdrawAmount(
     );
 
     if (bankAccounts.length === 0) {
-      session.lastAction = undefined;
-      sessionManager.setSession(chatId, session);
+      await sessionManager.setSession(chatId, {
+        ...session,
+        lastAction: undefined,
+      });
       await ctx.replyWithMarkdown(
         "🏦 *No Bank Accounts Found*\n\nYou need to add a bank account in Copperx to withdraw. Visit the app to add one.",
         Markup.inlineKeyboard([
@@ -1486,8 +1695,10 @@ export async function handleWithdrawAmount(
       callback_data: `withdraw_bank_${acc.id}_${amount}`,
     }));
 
-    session.lastAction = "withdraw_selectbank";
-    sessionManager.setSession(chatId, session);
+    await sessionManager.setSession(chatId, {
+      ...session,
+      lastAction: "withdraw_selectbank",
+    });
 
     await ctx.replyWithMarkdown(
       `🏦 *Select Bank Account*\n\nAmount: *${amount.toFixed(
@@ -1497,8 +1708,10 @@ export async function handleWithdrawAmount(
     );
   } catch (error) {
     const err = error as Error;
-    session.lastAction = undefined;
-    sessionManager.setSession(chatId, session);
+    await sessionManager.setSession(chatId, {
+      ...session,
+      lastAction: undefined,
+    });
     await ctx.reply(
       `❌ Error: ${err.message}`,
       Markup.inlineKeyboard([
@@ -1514,7 +1727,16 @@ export async function handleWithdrawSelectBank(
   amount: number
 ): Promise<void> {
   const chatId = ctx.chat!.id.toString();
-  const session = sessionManager.getSession(chatId)!;
+  const session = await sessionManager.getSession(chatId);
+  if (!session || !session.accessToken) {
+    await ctx.reply(
+      "⚠️ Session not found or not logged in. Please log in again.",
+      Markup.inlineKeyboard([
+        [Markup.button.callback("🔑 Log In", "start_login")],
+      ])
+    );
+    return;
+  }
 
   console.log(
     "handleWithdrawSelectBank called with bankAccountId:",
@@ -1526,7 +1748,7 @@ export async function handleWithdrawSelectBank(
   try {
     await ctx.reply("🔄 Fetching withdrawal quote...");
 
-    const accounts = await getAccounts(session.accessToken!);
+    const accounts = await getAccounts(session.accessToken);
     const bankAccount = accounts.data.find((acc) => acc.id === bankAccountId);
     if (!bankAccount || bankAccount.type !== "bank_account") {
       console.log(
@@ -1546,7 +1768,7 @@ export async function handleWithdrawSelectBank(
       sourceCountry: "none",
     };
 
-    const quote = await getOfframpQuote(session.accessToken!, quoteData);
+    const quote = await getOfframpQuote(session.accessToken, quoteData);
 
     const quotePayload = JSON.parse(quote.quotePayload);
     const usdcAmount = parseInt(quotePayload.amount) / 1e8;
@@ -1555,14 +1777,16 @@ export async function handleWithdrawSelectBank(
     const exchangeRate = parseFloat(quotePayload.rate);
 
     // Store the full quote in session
-    session.withdrawQuote = {
-      signature: quote.quoteSignature,
-      bankAccountId: bankAccountId,
-      amount: amount,
-      payload: quote.quotePayload, // Store payload too
-    };
-    session.lastAction = "withdraw_quote";
-    sessionManager.setSession(chatId, session);
+    await sessionManager.setSession(chatId, {
+      ...session,
+      withdrawQuote: {
+        signature: quote.quoteSignature,
+        bankAccountId: bankAccountId,
+        amount: amount,
+        payload: quote.quotePayload,
+      },
+      lastAction: "withdraw_quote",
+    });
 
     await ctx.replyWithMarkdown(
       `🏦 *Withdrawal Details*\n\n` +
@@ -1582,8 +1806,10 @@ export async function handleWithdrawSelectBank(
     );
   } catch (error) {
     const err = error as Error;
-    session.lastAction = undefined;
-    sessionManager.setSession(chatId, session);
+    await sessionManager.setSession(chatId, {
+      ...session,
+      lastAction: undefined,
+    });
     await ctx.reply(
       `❌ Error: ${err.message}`,
       Markup.inlineKeyboard([
@@ -1595,12 +1821,20 @@ export async function handleWithdrawSelectBank(
 
 export async function handleWithdrawConfirmation(ctx: Context): Promise<void> {
   const chatId = ctx.chat!.id.toString();
-  const session = sessionManager.getSession(chatId)!;
-
-  if (!session.withdrawQuote) {
-    await ctx.reply("❌ No withdrawal quote found. Please start over.");
-    session.lastAction = undefined;
-    sessionManager.setSession(chatId, session);
+  const session = await sessionManager.getSession(chatId);
+  if (!session || !session.withdrawQuote || !session.accessToken) {
+    await ctx.reply(
+      "❌ No withdrawal quote found or session invalid. Please start over with /withdraw.",
+      Markup.inlineKeyboard([
+        [Markup.button.callback("🏦 Withdraw", "start_withdraw")],
+      ])
+    );
+    if (session) {
+      await sessionManager.setSession(chatId, {
+        ...session,
+        lastAction: undefined,
+      });
+    }
     return;
   }
 
@@ -1614,7 +1848,7 @@ export async function handleWithdrawConfirmation(ctx: Context): Promise<void> {
   try {
     await ctx.reply("🔄 Processing withdrawal...");
 
-    const accounts = await getAccounts(session.accessToken!);
+    const accounts = await getAccounts(session.accessToken);
     const bankAccount = accounts.data.find((acc) => acc.id === bankAccountId);
     if (!bankAccount) throw new Error("Bank account not found.");
 
@@ -1625,13 +1859,15 @@ export async function handleWithdrawConfirmation(ctx: Context): Promise<void> {
     };
 
     const result = await createOfframpTransfer(
-      session.accessToken!,
+      session.accessToken,
       transferData
     );
 
-    session.lastAction = undefined;
-    delete session.withdrawQuote; // Clean up
-    sessionManager.setSession(chatId, session);
+    await sessionManager.setSession(chatId, {
+      ...session,
+      lastAction: undefined,
+      withdrawQuote: undefined, // Clean up
+    });
 
     const usdcAmount = parseInt(result.amount) / 1e8;
     const inrAmount = parseInt(JSON.parse(quotePayload).toAmount) / 1e8;
@@ -1654,12 +1890,14 @@ export async function handleWithdrawConfirmation(ctx: Context): Promise<void> {
     );
   } catch (error) {
     const err = error as Error;
-    session.lastAction = undefined;
-    delete session.withdrawQuote; // Clean up
-    sessionManager.setSession(chatId, session);
+    await sessionManager.setSession(chatId, {
+      ...session,
+      lastAction: undefined,
+      withdrawQuote: undefined, // Clean up
+    });
 
     if (err.message.includes("401")) {
-      sessionManager.deleteSession(chatId);
+      await sessionManager.deleteSession(chatId);
       await ctx.reply(
         "⚠️ Session expired. Please log in again.",
         Markup.inlineKeyboard([
@@ -1680,7 +1918,16 @@ export async function handleWithdrawConfirmation(ctx: Context): Promise<void> {
 export async function handleTransactionHistory(ctx: Context): Promise<void> {
   await requireAuth(ctx, async () => {
     const chatId = ctx.chat!.id.toString();
-    const session = sessionManager.getSession(chatId)!;
+    const session = await sessionManager.getSession(chatId);
+    if (!session) {
+      await ctx.reply(
+        "⚠️ Session not found. Please log in again.",
+        Markup.inlineKeyboard([
+          [Markup.button.callback("🔑 Log In", "start_login")],
+        ])
+      );
+      return;
+    }
 
     try {
       await ctx.reply("💼 Fetching your transaction history...");
@@ -1828,7 +2075,7 @@ export async function handleTransactionHistory(ctx: Context): Promise<void> {
     } catch (error) {
       const err = error as Error;
       if (err.message.includes("401")) {
-        sessionManager.deleteSession(chatId);
+        await sessionManager.deleteSession(chatId);
         await ctx.reply(
           "⚠️ Session expired. Please log in again.",
           Markup.inlineKeyboard([
@@ -1850,16 +2097,27 @@ export async function handleTransactionHistory(ctx: Context): Promise<void> {
 export async function handleSendBatch(ctx: Context): Promise<void> {
   await requireAuth(ctx, async () => {
     const chatId = ctx.chat!.id.toString();
-    const session = sessionManager.getSession(chatId)!;
+    const session = await sessionManager.getSession(chatId);
+    if (!session) {
+      await ctx.reply(
+        "⚠️ Session not found. Please log in again.",
+        Markup.inlineKeyboard([
+          [Markup.button.callback("🔑 Log In", "start_login")],
+        ])
+      );
+      return;
+    }
 
     // Initialize or reset batch payment state
     if (!session.batchPaymentState) {
-      session.batchPaymentState = {
-        payees: [],
-        step: "start",
-        availablePayees: [],
-      };
-      sessionManager.setSession(chatId, session);
+      await sessionManager.setSession(chatId, {
+        ...session,
+        batchPaymentState: {
+          payees: [],
+          step: "start",
+          availablePayees: [],
+        },
+      });
     }
 
     const batchState = session.batchPaymentState!;
@@ -1899,7 +2157,7 @@ export async function handleSendBatch(ctx: Context): Promise<void> {
 async function startBatchPayment(
   ctx: Context,
   chatId: string,
-  session: any
+  session: UserSession
 ): Promise<void> {
   const batchState = session.batchPaymentState!;
   try {
@@ -1907,7 +2165,7 @@ async function startBatchPayment(
     const payees = await getPayees(session.accessToken!);
     batchState.availablePayees = payees.data;
     batchState.step = "select_or_add_payee";
-    sessionManager.setSession(chatId, session);
+    await sessionManager.setSession(chatId, session);
 
     if (payees.count === 0) {
       await ctx.replyWithMarkdown(
@@ -1931,57 +2189,12 @@ async function startBatchPayment(
   }
 }
 
-async function showPayeeSelection(
-  ctx: Context,
-  chatId: string,
-  session: any,
-  showConfirmButton: boolean = false // Add parameter to control Confirm button visibility
-): Promise<void> {
-  const batchState = session.batchPaymentState!;
-  const payeeButtons = batchState.availablePayees.map((payee: any) => ({
-    text: `${payee.displayName} (${payee.email})`,
-    callback_data: `batch_payee_${payee.email}`,
-  }));
-
-  // Build the keyboard with payee buttons and additional options
-  const keyboard = [
-    ...payeeButtons.map((btn: any) => [btn]),
-    [Markup.button.callback("➕ Add New Payee", "add_new_payee")],
-  ];
-
-  // Add Confirm Batch button if there are payees and showConfirmButton is true
-  if (showConfirmButton && batchState.payees.length > 0) {
-    keyboard.push([
-      Markup.button.callback("✅ Confirm Batch", "confirm_batch"),
-    ]);
-  }
-
-  // Always add Cancel button
-  keyboard.push([Markup.button.callback("❌ Cancel", "cancel_action")]);
-
-  await ctx.replyWithMarkdown(
-    `📱 *Batch Payment*\n\n` +
-      (batchState.payees.length > 0
-        ? `Current payees: ${batchState.payees.length}\n` +
-          batchState.payees
-            .map(
-              (payee: any) =>
-                `- ${payee.email}: ${(parseInt(payee.amount) / 1e8).toFixed(
-                  2
-                )} USDC`
-            )
-            .join("\n") +
-          "\n\n"
-        : "") +
-      "Choose a payee or enter a new email to add:",
-    Markup.inlineKeyboard(keyboard)
-  );
-}
+// ... (previous code up to showPayeeSelection)
 
 async function handleAddNewPayee(
   ctx: Context,
   chatId: string,
-  session: any,
+  session: UserSession,
   text?: string
 ): Promise<void> {
   const batchState = session.batchPaymentState!;
@@ -1999,7 +2212,7 @@ async function handleAddNewPayee(
 
   batchState.currentEmail = email;
   batchState.step = "add_amount";
-  sessionManager.setSession(chatId, session);
+  await sessionManager.setSession(chatId, session);
 
   await ctx.reply(
     `📧 Email set: ${email}\n\nPlease enter the amount in USDC (e.g., 1 for 1 USDC):`,
@@ -2012,7 +2225,7 @@ async function handleAddNewPayee(
 async function handleAddAmount(
   ctx: Context,
   chatId: string,
-  session: any,
+  session: UserSession,
   text?: string
 ): Promise<void> {
   const batchState = session.batchPaymentState!;
@@ -2045,19 +2258,65 @@ async function handleAddAmount(
     amount: batchState.currentAmount,
   });
   batchState.step = "select_or_add_payee";
-  sessionManager.setSession(chatId, session);
+  await sessionManager.setSession(chatId, session);
 
-  // Instead of just showing confirm/cancel, re-display the payee selection menu
   await ctx.replyWithMarkdown(
     `💰 Amount set: ${amount} USDC for ${batchState.currentEmail}`
   );
   await showPayeeSelection(ctx, chatId, session, true); // Pass true to show Confirm button
 }
 
+async function showPayeeSelection(
+  ctx: Context,
+  chatId: string,
+  session: UserSession,
+  showConfirmButton: boolean = false
+): Promise<void> {
+  const batchState = session.batchPaymentState!;
+  const payeeButtons = batchState.availablePayees.map((payee: any) => ({
+    text: `${payee.displayName} (${payee.email})`,
+    callback_data: `batch_payee_${payee.email}`,
+  }));
+
+  // Build the keyboard with payee buttons and additional options
+  const keyboard = [
+    ...payeeButtons.map((btn: any) => [btn]),
+    [Markup.button.callback("➕ Add New Payee", "add_new_payee")],
+  ];
+
+  // Add Confirm Batch button if there are payees and showConfirmButton is true
+  if (showConfirmButton && batchState.payees.length > 0) {
+    keyboard.push([
+      Markup.button.callback("✅ Confirm Batch", "confirm_batch"),
+    ]);
+  }
+
+  // Always add Cancel button at the end
+  keyboard.push([Markup.button.callback("❌ Cancel", "cancel_action")]);
+
+  // Construct the message showing current payees (if any) and prompt for selection
+  const message =
+    batchState.payees.length > 0
+      ? `📱 *Batch Payment*\n\n` +
+        `Current payees: ${batchState.payees.length}\n` +
+        batchState.payees
+          .map(
+            (payee: any) =>
+              `- ${payee.email}: ${(parseInt(payee.amount) / 1e8).toFixed(
+                2
+              )} USDC`
+          )
+          .join("\n") +
+        "\n\nChoose a payee or add a new one:"
+      : "📱 *Batch Payment*\n\nChoose a payee or add a new one:";
+
+  await ctx.replyWithMarkdown(message, Markup.inlineKeyboard(keyboard));
+}
+
 export async function handleConfirmBatch(
   ctx: Context,
   chatId: string,
-  session: any
+  session: UserSession
 ): Promise<void> {
   const batchState = session.batchPaymentState!;
   if (batchState.payees.length === 0) {
@@ -2069,14 +2328,14 @@ export async function handleConfirmBatch(
       ])
     );
     batchState.step = "start";
-    sessionManager.setSession(chatId, session);
+    await sessionManager.setSession(chatId, session);
     return;
   }
 
   try {
     await ctx.reply("🔄 Sending batch payment...");
 
-    const requests = batchState.payees.map((payee: any, index: any) => ({
+    const requests = batchState.payees.map((payee: any, index: number) => ({
       requestId: `batch-payment-${index + 1}-${uuidv4()}`,
       request: {
         email: payee.email,
@@ -2103,7 +2362,7 @@ export async function handleConfirmBatch(
 
     batchState.payees = [];
     batchState.step = "start";
-    sessionManager.setSession(chatId, session);
+    await sessionManager.setSession(chatId, session);
 
     await ctx.replyWithMarkdown(
       message,
@@ -2116,10 +2375,10 @@ export async function handleConfirmBatch(
   } catch (error) {
     const err = error as Error;
     batchState.step = "start";
-    sessionManager.setSession(chatId, session);
+    await sessionManager.setSession(chatId, session);
 
     if (err.message.includes("401")) {
-      sessionManager.deleteSession(chatId);
+      await sessionManager.deleteSession(chatId);
       await ctx.reply(
         "⚠️ Session expired. Please log in again.",
         Markup.inlineKeyboard([
@@ -2143,9 +2402,10 @@ export async function handleRequestNewOtp(ctx: Context): Promise<void> {
   const chatId = ctx.chat?.id.toString();
   if (!chatId) return;
 
-  const session = sessionManager.getSession(chatId);
+  const session = await sessionManager.getSession(chatId);
   if (!session || !session.email) {
-    return handleStartLogin(ctx);
+    await handleStartLogin(ctx);
+    return;
   }
 
   try {
@@ -2153,7 +2413,8 @@ export async function handleRequestNewOtp(ctx: Context): Promise<void> {
 
     const { sid } = await requestOtp(session.email);
 
-    sessionManager.setSession(chatId, {
+    await sessionManager.setSession(chatId, {
+      ...session,
       sid,
       loginState: "waiting_for_otp",
       otpRequestedAt: new Date(),
@@ -2186,10 +2447,18 @@ export async function handleSendNetworkSelection(
   const chatId = ctx.chat?.id.toString();
   if (!chatId) return;
 
-  const session = sessionManager.getSession(chatId);
-  if (!session) return;
+  const session = await sessionManager.getSession(chatId);
+  if (!session) {
+    await ctx.reply(
+      "⚠️ Session not found. Please log in again.",
+      Markup.inlineKeyboard([
+        [Markup.button.callback("🔑 Log In", "start_login")],
+      ])
+    );
+    return;
+  }
 
-  sessionManager.setSession(chatId, {
+  await sessionManager.setSession(chatId, {
     ...session,
     lastAction: `send_${network}`,
   });
@@ -2209,10 +2478,18 @@ export async function handleWithdrawNetworkSelection(
   const chatId = ctx.chat?.id.toString();
   if (!chatId) return;
 
-  const session = sessionManager.getSession(chatId);
-  if (!session) return;
+  const session = await sessionManager.getSession(chatId);
+  if (!session) {
+    await ctx.reply(
+      "⚠️ Session not found. Please log in again.",
+      Markup.inlineKeyboard([
+        [Markup.button.callback("🔑 Log In", "start_login")],
+      ])
+    );
+    return;
+  }
 
-  sessionManager.setSession(chatId, {
+  await sessionManager.setSession(chatId, {
     ...session,
     lastAction: `withdraw_${network}`,
   });
@@ -2232,8 +2509,14 @@ export async function handleRecipientInput(
   const chatId = ctx.chat?.id.toString();
   if (!chatId) return;
 
-  const session = sessionManager.getSession(chatId);
-  if (!session || !session.lastAction?.startsWith("send_")) return;
+  const session = await sessionManager.getSession(chatId);
+  if (!session || !session.lastAction?.startsWith("send_")) {
+    await ctx.reply(
+      "⚠️ Session not found or invalid state. Please start over with /send.",
+      Markup.inlineKeyboard([[Markup.button.callback("📤 Send", "start_send")]])
+    );
+    return;
+  }
 
   const network = session.lastAction.split("_")[1];
 
@@ -2245,7 +2528,7 @@ export async function handleRecipientInput(
     return;
   }
 
-  sessionManager.setSession(chatId, {
+  await sessionManager.setSession(chatId, {
     ...session,
     lastAction: `send_${network}_to_${recipient}`,
   });
@@ -2266,8 +2549,16 @@ export async function handleDestinationInput(
   const chatId = ctx.chat?.id.toString();
   if (!chatId) return;
 
-  const session = sessionManager.getSession(chatId);
-  if (!session || !session.lastAction?.startsWith("withdraw_")) return;
+  const session = await sessionManager.getSession(chatId);
+  if (!session || !session.lastAction?.startsWith("withdraw_")) {
+    await ctx.reply(
+      "⚠️ Session not found or invalid state. Please start over with /withdraw.",
+      Markup.inlineKeyboard([
+        [Markup.button.callback("🏦 Withdraw", "start_withdraw")],
+      ])
+    );
+    return;
+  }
 
   const network = session.lastAction.split("_")[1];
 
@@ -2277,7 +2568,7 @@ export async function handleDestinationInput(
     return;
   }
 
-  sessionManager.setSession(chatId, {
+  await sessionManager.setSession(chatId, {
     ...session,
     lastAction: `withdraw_${network}_to_${destination}`,
   });
@@ -2298,17 +2589,28 @@ export async function handleSendAmountInput(
   const chatId = ctx.chat?.id.toString();
   if (!chatId) return;
 
-  const session = sessionManager.getSession(chatId);
+  const session = await sessionManager.getSession(chatId);
   if (
     !session ||
     !session.lastAction?.startsWith("send_") ||
     !session.accessToken
-  )
+  ) {
+    await ctx.reply(
+      "⚠️ Session not found or invalid state. Please start over with /send.",
+      Markup.inlineKeyboard([[Markup.button.callback("📤 Send", "start_send")]])
+    );
     return;
+  }
 
   // Parse action details
   const parts = session.lastAction.split("_");
-  if (parts.length < 4) return;
+  if (parts.length < 4) {
+    await ctx.reply(
+      "⚠️ Invalid state. Please start over with /send.",
+      Markup.inlineKeyboard([[Markup.button.callback("📤 Send", "start_send")]])
+    );
+    return;
+  }
 
   const network = parts[1];
   const recipient = parts[3];

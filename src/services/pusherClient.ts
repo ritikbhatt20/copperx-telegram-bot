@@ -1,9 +1,8 @@
-// services/pusherClient.ts
 import Pusher, { Channel, ChannelAuthorizationCallback } from "pusher-js";
 import axios from "axios";
 import crypto from "crypto"; // Add for HMAC calculation
 import { bot } from "../bot";
-import { sessionManager } from "./sessionManager";
+import { sessionManager } from "../bot";
 import { CONFIG } from "../config";
 
 // Define the expected response type from /api/notifications/auth
@@ -41,7 +40,7 @@ export class PusherClient {
           socketId: string,
           callback: ChannelAuthorizationCallback
         ) => {
-          const session = sessionManager.getSession(this.chatId);
+          const session = await sessionManager.getSession(this.chatId);
           if (!session || !session.accessToken || !session.organizationId) {
             callback(new Error("User not authenticated"), null);
             return;
@@ -125,8 +124,8 @@ export class PusherClient {
     this.setupSubscriptions();
   }
 
-  private setupSubscriptions() {
-    const session = sessionManager.getSession(this.chatId);
+  private async setupSubscriptions() {
+    const session = await sessionManager.getSession(this.chatId);
     if (!session || !session.organizationId) {
       console.error("No organization ID found for chat:", this.chatId);
       bot.telegram.sendMessage(
