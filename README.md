@@ -2,13 +2,15 @@
 
 Welcome to the Copperx Payout Telegram Bot, a TypeScript-based Telegram bot that integrates with the Copperx Payout API to enable users to manage their stablecoin transactions directly from Telegram. This bot allows depositing, withdrawing, and transferring USDC without needing to visit the Copperx web app.
 
-This project was built for the Copperx Telegram Bot Bounty by [Your Name/Handle]. Try it out at @CopperxPayoutBot (replace with your actual bot username after deployment)!
+Try it out at [@copperx_tele_bot](https://t.me/copperx_tele_bot)!
 
 ## Features
 
 - **Authentication**: Secure login with email OTP.
 - **Wallet Management**: View balances, set default wallets, and deposit funds.
 - **Fund Transfers**: Send USDC via email or wallet address, withdraw to bank accounts, and view transaction history.
+- **Batch Payment**: Process multiple USDC transfers simultaneously to various recipients/email addresses with a single command.
+- **Natural Language Parsing**: Understand conversational commands like "send 50 USDC to alex@example.com" or "deposit 100 USDC to my wallet", eliminating the need for formal command syntax.
 - **Real-Time Notifications**: Receive deposit notifications via Pusher.
 - **Interactive UI**: Intuitive commands, inline keyboards, and natural language support (e.g., "send 5 USDC to user@example.com").
 - **Security**: Session management with Redis, no plaintext passwords, and transaction confirmations.
@@ -88,19 +90,23 @@ Start a chat with @YourBotUsername on Telegram and run `/start`.
 The bot integrates with the Copperx Payout API (base URL: `https://income-api.copperx.io`). Full documentation is available at Copperx API Docs. Key endpoints used:
 
 ### Authentication:
+
 - `/api/auth/email-otp/request`: Request OTP for login.
 - `/api/auth/email-otp/authenticate`: Authenticate with OTP.
 - `/api/auth/me`: Fetch user profile.
 
 ### KYC:
+
 - `/api/kycs`: Check KYC/KYB status.
 
 ### Wallets:
+
 - `/api/wallets`: List wallets.
 - `/api/wallets/balances`: Get wallet balances.
 - `/api/wallets/default`: Set default wallet.
 
 ### Transfers:
+
 - `/api/transfers/send`: Send USDC to an email.
 - `/api/transfers/wallet-withdraw`: Send USDC to a wallet.
 - `/api/transfers/offramp`: Withdraw to a bank.
@@ -108,13 +114,16 @@ The bot integrates with the Copperx Payout API (base URL: `https://income-api.co
 - `/api/transfers?page=1&limit=10`: Transaction history.
 
 ### Payees:
+
 - `/api/payees`: Add/list payees.
 - `/api/payees/{id}`: Delete payee.
 
 ### Quotes:
+
 - `/api/quotes/offramp`: Get bank withdrawal quote.
 
 ### Notifications:
+
 - `/api/notifications/auth`: Authenticate Pusher.
 - Pusher channel: `private-org-${organizationId}` for deposit events.
 
@@ -124,30 +133,32 @@ All API calls use Axios with TypeScript types defined in `config.ts`. Authentica
 
 Below is a list of available commands and their descriptions:
 
-| Command | Description | Example Usage |
-|---------|-------------|---------------|
-| `/start` | Start or restart the bot | `/start` |
-| `/help` | Show available commands | `/help` |
-| `/profile` | View your Copperx profile | `/profile` |
-| `/kyc` | Check KYC/KYB status | `/kyc` |
-| `/balance` | View wallet balances | `/balance` |
-| `/setdefault` | Set default wallet | `/setdefault` |
-| `/deposit` | Get deposit instructions | `/deposit` |
-| `/send` | Send USDC to a wallet address | `/send` |
-| `/sendemail` | Send USDC via email | `/sendemail` |
-| `/sendbatch` | Send USDC to multiple payees | `/sendbatch` |
-| `/withdraw` | Withdraw USDC to a bank account | `/withdraw` |
-| `/history` | View last 10 transactions | `/history` |
-| `/addpayee` | Add a new payee | `/addpayee` |
-| `/removepayee` | Remove an existing payee | `/removepayee` |
-| `/points` | View your Copperx Mint points | `/points` |
-| `/logout` | Log out of your account | `/logout` |
+| Command        | Description                     | Example Usage  |
+| -------------- | ------------------------------- | -------------- |
+| `/start`       | Start or restart the bot        | `/start`       |
+| `/help`        | Show available commands         | `/help`        |
+| `/profile`     | View your Copperx profile       | `/profile`     |
+| `/kyc`         | Check KYC/KYB status            | `/kyc`         |
+| `/balance`     | View wallet balances            | `/balance`     |
+| `/setdefault`  | Set default wallet              | `/setdefault`  |
+| `/deposit`     | Get deposit instructions        | `/deposit`     |
+| `/send`        | Send USDC to a wallet address   | `/send`        |
+| `/sendemail`   | Send USDC via email             | `/sendemail`   |
+| `/sendbatch`   | Send USDC to multiple payees    | `/sendbatch`   |
+| `/withdraw`    | Withdraw USDC to a bank account | `/withdraw`    |
+| `/history`     | View last 10 transactions       | `/history`     |
+| `/addpayee`    | Add a new payee                 | `/addpayee`    |
+| `/removepayee` | Remove an existing payee        | `/removepayee` |
+| `/points`      | View your Copperx Mint points   | `/points`      |
+| `/logout`      | Log out of your account         | `/logout`      |
 
 ### Natural Language Support
+
 - Send funds: `send 5 USDC to user@example.com` or `send 5 USDC to 0x123...abc`.
 - Deposit: `deposit 5 USDC`.
 
 ### Inline Keyboard Options
+
 Most commands trigger interactive menus (e.g., wallet selection, confirmation buttons). Follow the prompts to complete actions.
 
 ## Troubleshooting Guide
@@ -155,47 +166,58 @@ Most commands trigger interactive menus (e.g., wallet selection, confirmation bu
 ### Common Issues & Solutions
 
 #### Bot Doesn't Respond
+
 - **Cause**: Missing or invalid BOT_TOKEN.
 - **Fix**: Verify your `.env` file and ensure the token from BotFather is correct. Restart with `npm start`.
 
 #### "Session Expired" Error
+
 - **Cause**: Token expired or invalid.
 - **Fix**: Log in again with `/start` or `/login`. Check Redis connectivity.
 
 #### "Rate Limit Exceeded"
+
 - **Cause**: Too many API requests (e.g., OTP requests).
 - **Fix**: Wait the specified time (e.g., 60 seconds) and retry. See error message for details.
 
 #### Deposit Notifications Not Working
+
 - **Cause**: Pusher misconfiguration or signature mismatch.
-- **Fix**: 
+- **Fix**:
   - Ensure PUSHER_APP_KEY, PUSHER_APP_CLUSTER, and PUSHER_APP_SECRET are correct in `.env`.
   - Check logs for Pusher errors. Note: A signature mismatch workaround is in place—contact Copperx support at Telegram Community to resolve.
 
 #### Redis Connection Errors
+
 - **Cause**: Redis server not running or misconfigured.
 - **Fix**: Start Redis (`redis-server`) or update REDIS_HOST, REDIS_PORT, and REDIS_PASSWORD in `.env`.
 
 #### API Errors (e.g., 401, 403)
+
 - **Cause**: Invalid or expired access token.
 - **Fix**: Re-authenticate via `/start`. Ensure your Copperx account is active.
 
 #### "No Wallets Found"
+
 - **Cause**: Account setup incomplete on Copperx.
 - **Fix**: Visit Copperx Dashboard to add a wallet.
 
 ### Debugging Tips
+
 - Set `NODE_ENV=development` in `.env` to enable console logging.
 - Check `error.log` and `combined.log` for detailed error messages.
 - Contact support at Copperx Telegram Community for API-related issues.
 
 ## Development Notes
+
 - **Tech Stack**: TypeScript, Node.js, Telegraf, Redis, Axios, Pusher.
 - **Security**: Sessions stored in Redis with 30-day TTL, no plaintext credentials.
 - **Future Improvements**: Add unit tests, refactor long handlers, resolve Pusher signature issue.
 
 ## Contributing
+
 Feel free to fork this repo and submit pull requests! Report issues via GitHub or the Copperx Telegram community.
 
 ## License
-MIT License - see LICENSE for details.
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
