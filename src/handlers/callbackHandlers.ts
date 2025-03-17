@@ -94,9 +94,78 @@ export async function handleCallbackQuery(ctx: Context): Promise<void> {
   if (data === "deposit") return await handleDeposit(ctx);
   if (data === "set_default_wallet") return await handleSetDefaultWallet(ctx);
   if (data === "show_help") return await handleHelp(ctx);
-  if (data === "back_to_menu") return await handleStart(ctx);
   if (data === "send_batch") return await handleSendBatch(ctx);
   if (data === "view_points") return await handlePoints(ctx);
+
+  if (data === "back_to_menu") {
+    try {
+      // Check if the message contains a photo
+      const message = ctx.callbackQuery?.message;
+      // Use type guard to check if the message has a 'photo' property
+      const hasPhoto =
+        message && "photo" in message && Array.isArray(message.photo);
+
+      if (hasPhoto) {
+        // For photo messages, send a new main menu message
+        const chatId = ctx.chat?.id.toString();
+        if (!chatId) return;
+
+        const isLoggedIn = await sessionManager.isLoggedIn(chatId);
+        if (isLoggedIn) {
+          await ctx.reply(
+            "🚀 Welcome to CopperX Bot!\n\n" +
+              "I'm here to help you manage your CopperX account. Choose an option below:",
+            Markup.inlineKeyboard([
+              [
+                Markup.button.callback("👤 Profile", "view_profile"),
+                Markup.button.callback("📋 KYC Status", "view_kyc"),
+              ],
+              [
+                Markup.button.callback("🎒 Wallets", "view_wallets"),
+                Markup.button.callback("💰 Balance", "view_balance"),
+              ],
+              [
+                Markup.button.callback("📤 Send Money", "send_money_menu"),
+                Markup.button.callback("📥 Deposit", "deposit"),
+              ],
+              [
+                Markup.button.callback("⚙️ Set Default Wallet", "set_default_wallet"),
+                Markup.button.callback("➕ Add Payee", "start_addpayee"),
+              ],
+              [
+                Markup.button.callback("🗑️ Remove Payee", "removepayee"),
+                Markup.button.callback("📱 Batch Payment", "send_batch"),
+              ],
+              [
+                Markup.button.callback("📜 Transactions", "view_history"),
+                Markup.button.callback("💎 View Points", "view_points"),
+              ],
+              [Markup.button.callback("🔒 Logout", "logout")],
+            ])
+          );
+        } else {
+          await ctx.reply(
+            "🚀 Welcome to CopperX Bot!\n\n" +
+              "⚠️ You need to be logged in first to use this bot.\n\n" +
+              "Press the button below to log in:",
+            Markup.inlineKeyboard([
+              [Markup.button.callback("🔑 Log In", "start_login")],
+            ])
+          );
+        }
+      } else {
+        // For text messages, use the existing handleStart
+        await handleStart(ctx);
+      }
+    } catch (error) {
+      const err = error as Error;
+      console.error("Error handling 'back_to_menu':", err.message);
+      await ctx.reply(
+        "⚠️ Something went wrong. Please try /start to return to the main menu."
+      );
+    }
+    return;
+  }
 
   if (data.startsWith("set_default_wallet_")) {
     const walletId = data.replace("set_default_wallet_", "");

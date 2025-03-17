@@ -62,6 +62,9 @@ export async function handleStart(ctx: Context): Promise<void> {
   const chatId = ctx.chat?.id.toString();
   if (!chatId) return;
 
+  // Check if this was triggered by a button click
+  const callbackQuery = ctx.callbackQuery;
+
   const existingSession = await sessionManager.getSession(chatId);
   if (!existingSession) {
     await sessionManager.setSession(chatId, { chatId });
@@ -70,46 +73,69 @@ export async function handleStart(ctx: Context): Promise<void> {
   const isLoggedIn = await sessionManager.isLoggedIn(chatId);
 
   if (!isLoggedIn) {
-    await ctx.reply(
+    const loginText =
       "🚀 Welcome to CopperX Bot!\n\n" +
-        "⚠️ You need to be logged in first to use this bot.\n\n" +
-        "Press the button below to log in:",
-      Markup.inlineKeyboard([
-        [Markup.button.callback("🔑 Log In", "start_login")],
-      ])
-    );
+      "⚠️ You need to be logged in first to use this bot.\n\n" +
+      "Press the button below to log in:";
+
+    const loginButtons = Markup.inlineKeyboard([
+      [Markup.button.callback("🔑 Log In", "start_login")],
+    ]);
+
+    if (callbackQuery) {
+      await ctx.editMessageText(loginText, loginButtons);
+    } else {
+      await ctx.reply(loginText, loginButtons);
+    }
   } else {
-    await ctx.reply(
+    const menuText =
       "🚀 Welcome to CopperX Bot!\n\n" +
-        "I'm here to help you manage your CopperX account. Choose an option below:",
-      Markup.inlineKeyboard([
-        [
-          Markup.button.callback("👤 Profile", "view_profile"),
-          Markup.button.callback("📋 KYC Status", "view_kyc"),
-        ],
-        [
-          Markup.button.callback("🎒 Wallets", "view_wallets"),
-          Markup.button.callback("💰 Balance", "view_balance"),
-        ],
-        [
-          Markup.button.callback("📤 Send Money", "send_money_menu"),
-          Markup.button.callback("📥 Deposit", "deposit"),
-        ],
-        [
-          Markup.button.callback("⚙️ Set Default Wallet", "set_default_wallet"),
-          Markup.button.callback("➕ Add Payee", "start_addpayee"),
-        ],
-        [
-          Markup.button.callback("🗑️ Remove Payee", "removepayee"),
-          Markup.button.callback("📱 Batch Payment", "send_batch"),
-        ],
-        [
-          Markup.button.callback("📜 Transactions", "view_history"),
-          Markup.button.callback("💎 View Points", "view_points"),
-        ],
-        [Markup.button.callback("🔒 Logout", "logout")],
-      ])
-    );
+      "I'm here to help you manage your CopperX account. Choose an option below:";
+
+    const menuButtons = Markup.inlineKeyboard([
+      // Account & Profile Group
+      [
+        Markup.button.callback("👤 Profile", "view_profile"),
+        Markup.button.callback("📋 KYC Status", "view_kyc"),
+      ],
+
+      // Asset Management Group
+      [
+        Markup.button.callback("🎒 Wallets", "view_wallets"),
+        Markup.button.callback("💰 Balance", "view_balance"),
+      ],
+
+      // Transaction Group
+      [
+        Markup.button.callback("📤 Send Money", "send_money_menu"),
+        Markup.button.callback("📥 Deposit", "deposit"),
+      ],
+
+      // Payment Management Group
+      [
+        Markup.button.callback("➕ Add Payee", "start_addpayee"),
+        Markup.button.callback("🗑️ Remove Payee", "removepayee"),
+      ],
+      [
+        Markup.button.callback("📱 Batch Payment", "send_batch"),
+        Markup.button.callback("⚙️ Set Default Wallet", "set_default_wallet"),
+      ],
+
+      // History & Rewards Group
+      [
+        Markup.button.callback("📜 Transactions", "view_history"),
+        Markup.button.callback("💎 View Points", "view_points"),
+      ],
+
+      // Logout
+      [Markup.button.callback("🔒 Logout", "logout")],
+    ]);
+
+    if (callbackQuery) {
+      await ctx.editMessageText(menuText, menuButtons);
+    } else {
+      await ctx.reply(menuText, menuButtons);
+    }
   }
 }
 
@@ -146,25 +172,38 @@ export async function handleHelp(ctx: Context): Promise<void> {
 
   const keyboardButtons = isLoggedIn
     ? [
+        // Account & Profile Group
         [
           Markup.button.callback("👤 Profile", "view_profile"),
-          Markup.button.callback("💵 Balance", "view_balance"),
+          Markup.button.callback("📋 KYC Status", "view_kyc"),
         ],
+
+        // Asset Management Group
         [
+          Markup.button.callback("🎒 Wallets", "view_wallets"),
+          Markup.button.callback("💰 Balance", "view_balance"),
+        ],
+
+        // Transaction Group
+        [
+          Markup.button.callback("📤 Send Money", "send_money_menu"),
           Markup.button.callback("📥 Deposit", "deposit"),
-          Markup.button.callback("💸 Send Money", "send_money_menu"),
         ],
-        [
-          Markup.button.callback("📤 Batch Send", "send_batch"),
-          Markup.button.callback("🏦 Withdraw to Bank", "start_withdraw"),
-        ],
+
+        // Payment Management Group
         [
           Markup.button.callback("➕ Add Payee", "start_addpayee"),
           Markup.button.callback("🗑️ Remove Payee", "removepayee"),
         ],
         [
-          Markup.button.callback("📜 History", "view_history"),
-          Markup.button.callback("💎 Points", "view_points"),
+          Markup.button.callback("📱 Batch Payment", "send_batch"),
+          Markup.button.callback("⚙️ Set Default Wallet", "set_default_wallet"),
+        ],
+
+        // History & Rewards Group
+        [
+          Markup.button.callback("📜 Transactions", "view_history"),
+          Markup.button.callback("💎 View Points", "view_points"),
         ],
       ]
     : [[Markup.button.callback("🔑 Log In", "start_login")]];
@@ -315,30 +354,41 @@ export async function handleOtpInput(ctx: Context, otp: string): Promise<void> {
     await ctx.replyWithHTML(
       `🎉 <b>Login successful!</b>\n\n🚀 Welcome to CopperX Bot, ${user.email}!\n\nI'm here to help you manage your CopperX account. Choose an option below:`,
       Markup.inlineKeyboard([
+        // Account & Profile Group
         [
           Markup.button.callback("👤 Profile", "view_profile"),
           Markup.button.callback("📋 KYC Status", "view_kyc"),
         ],
+
+        // Asset Management Group
         [
           Markup.button.callback("🎒 Wallets", "view_wallets"),
           Markup.button.callback("💰 Balance", "view_balance"),
         ],
+
+        // Transaction Group
         [
           Markup.button.callback("📤 Send Money", "send_money_menu"),
           Markup.button.callback("📥 Deposit", "deposit"),
         ],
+
+        // Payment Management Group
         [
-          Markup.button.callback("⚙️ Set Default Wallet", "set_default_wallet"),
           Markup.button.callback("➕ Add Payee", "start_addpayee"),
+          Markup.button.callback("🗑️ Remove Payee", "removepayee"),
         ],
         [
-          Markup.button.callback("🗑️ Remove Payee", "removepayee"),
           Markup.button.callback("📱 Batch Payment", "send_batch"),
+          Markup.button.callback("⚙️ Set Default Wallet", "set_default_wallet"),
         ],
+
+        // History & Rewards Group
         [
           Markup.button.callback("📜 Transactions", "view_history"),
           Markup.button.callback("💎 View Points", "view_points"),
         ],
+
+        // Logout
         [Markup.button.callback("🔒 Logout", "logout")],
       ])
     );
@@ -1024,47 +1074,87 @@ export async function handleSetDefaultWalletSelection(
 
 export async function handleSendMoneyMenu(ctx: Context): Promise<void> {
   await requireAuth(ctx, async () => {
-    const chatId = ctx.chat!.id.toString();
+    const chatId = ctx.chat?.id.toString();
+    // Check if the context has callback query (meaning it was triggered by a button)
+    const callbackQuery = ctx.callbackQuery;
+
+    if (!chatId) return;
+
     const session = await sessionManager.getSession(chatId);
     if (!session) {
-      await ctx.reply(
-        "⚠️ Session not found. Please log in again.",
-        Markup.inlineKeyboard([
-          [Markup.button.callback("🔑 Log In", "start_login")],
-        ])
-      );
+      // If using existing message
+      if (callbackQuery) {
+        await ctx.editMessageText(
+          "⚠️ Session not found. Please log in again.",
+          Markup.inlineKeyboard([
+            [Markup.button.callback("🔑 Log In", "start_login")],
+          ])
+        );
+      } else {
+        await ctx.reply(
+          "⚠️ Session not found. Please log in again.",
+          Markup.inlineKeyboard([
+            [Markup.button.callback("🔑 Log In", "start_login")],
+          ])
+        );
+      }
       return;
     }
 
     try {
-      // Just send the send money menu without fetching or displaying balances
-      await ctx.replyWithHTML(
-        `📤 <b>Send Money</b>\n\n👇 Choose how you'd like to send funds:`,
-        Markup.inlineKeyboard([
-          [Markup.button.callback("📧 Send to Email", "start_sendemail")],
-          [Markup.button.callback("💸 Send to Wallet", "start_send")],
-          [Markup.button.callback("🏦 Bank Withdraw", "start_withdraw")],
-          [Markup.button.callback("« Back to Menu", "back_to_menu")],
-        ])
-      );
+      const menuText = `📤 <b>Send Money</b>\n\n👇 Choose how you'd like to send funds:`;
+      const menuButtons = Markup.inlineKeyboard([
+        [Markup.button.callback("📧 Send to Email", "start_sendemail")],
+        [Markup.button.callback("💸 Send to Wallet", "start_send")],
+        [Markup.button.callback("🏦 Bank Withdraw", "start_withdraw")],
+        [Markup.button.callback("« Back to Menu", "back_to_menu")],
+      ]);
+
+      // If this was triggered by a button click, edit the existing message
+      if (callbackQuery) {
+        await ctx.editMessageText(menuText, {
+          parse_mode: "HTML",
+          ...menuButtons,
+        });
+      } else {
+        // Otherwise send a new message (direct command case)
+        await ctx.replyWithHTML(menuText, menuButtons);
+      }
     } catch (error) {
       const err = error as Error;
       if (err.message.includes("401")) {
         await sessionManager.deleteSession(chatId);
-        await ctx.reply(
-          "⚠️ Session expired. Please log in again.",
-          Markup.inlineKeyboard([
-            Markup.button.callback("🔑 Log In", "start_login"),
-          ])
-        );
+
+        // Handle session expiry based on trigger type
+        if (callbackQuery) {
+          await ctx.editMessageText(
+            "⚠️ Session expired. Please log in again.",
+            Markup.inlineKeyboard([
+              Markup.button.callback("🔑 Log In", "start_login"),
+            ])
+          );
+        } else {
+          await ctx.reply(
+            "⚠️ Session expired. Please log in again.",
+            Markup.inlineKeyboard([
+              Markup.button.callback("🔑 Log In", "start_login"),
+            ])
+          );
+        }
         return;
       }
-      await ctx.reply(
-        `❌ Error: ${err.message}`,
-        Markup.inlineKeyboard([
-          Markup.button.callback("<< Back to Menu", "back_to_menu"),
-        ])
-      );
+
+      // Handle other errors based on trigger type
+      const errorText = `❌ Error: ${err.message}`;
+      const errorButtons = Markup.inlineKeyboard([
+        Markup.button.callback("<< Back to Menu", "back_to_menu"),
+      ]);
+
+      if (callbackQuery) {
+        await ctx.editMessageText(errorText, errorButtons);
+      } else {
+        await ctx.reply(errorText, errorButtons);
+      }
     }
   });
 }
